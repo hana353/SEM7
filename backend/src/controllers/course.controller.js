@@ -41,3 +41,25 @@ exports.assignTeacher = async (req, res) => {
     return res.status(400).json({ message: e.message });
   }
 };
+
+// Admin: update course (edit from list/detail)
+exports.updateByAdmin = async (req, res) => {
+  try {
+    const { id } = req.params; // course id
+    const result = await courseService.updateCourseByAdmin(id, req.body);
+    return res.json(result);
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
+// Admin: delete course (soft delete)
+exports.deleteByAdmin = async (req, res) => {
+  try {
+    const { id } = req.params; // course id
+    const result = await courseService.softDeleteCourseByAdmin(id);
+    return res.json(result);
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};

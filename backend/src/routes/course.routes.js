@@ -9,10 +9,16 @@ const { requireAuth, requireRole } = require("../middleware/auth.middleware");
 router.get("/", controller.getAll);
 router.get("/:id", controller.getById);
 
-// Admin: create + assign teacher
+// Admin: create
 router.post("/", requireAuth, requireRole("ADMIN"), controller.createByAdmin);
 
 // Admin: change/assign teacher to course
 router.patch("/:id/assign-teacher", requireAuth, requireRole("ADMIN"), controller.assignTeacher);
+
+// Admin: update course (edit from list/detail)
+router.patch("/:id", requireAuth, requireRole("ADMIN"), controller.updateByAdmin);
+
+// Admin: delete course (soft delete)
+router.delete("/:id", requireAuth, requireRole("ADMIN"), controller.deleteByAdmin);
 
 module.exports = router;
