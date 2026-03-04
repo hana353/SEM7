@@ -171,6 +171,122 @@ CREATE TABLE vocabularies (
 GO
 
 /* =========================================================
+   SAMPLE DATA - VOCABULARY TOPICS & WORDS
+   (Data mẫu phục vụ demo giao diện admin / luyện từ vựng)
+========================================================= */
+
+INSERT INTO vocabulary_topics (title)
+VALUES
+  (N'Daily Activities - A1'),
+  (N'Travel & Transport - A2'),
+  (N'Technology - B1');
+
+INSERT INTO vocabularies (topic_id, word, meaning, example_sentence)
+SELECT t.id,
+       v.word,
+       v.meaning,
+       v.example_sentence
+FROM vocabulary_topics t
+JOIN (
+  /* Daily Activities - A1 */
+  SELECT
+    N'Daily Activities - A1'              AS topic_title,
+    N'wake up'                            AS word,
+    N'thức dậy'                           AS meaning,
+    N'I usually wake up at 6 a.m.'        AS example_sentence
+  UNION ALL
+  SELECT
+    N'Daily Activities - A1',
+    N'brush teeth',
+    N'đánh răng',
+    N'Children should brush their teeth twice a day.'
+  UNION ALL
+  SELECT
+    N'Daily Activities - A1',
+    N'have breakfast',
+    N'ăn sáng',
+    N'We have breakfast together every morning.'
+  UNION ALL
+  SELECT
+    N'Daily Activities - A1',
+    N'go to school',
+    N'đi học',
+    N'The kids go to school by bus.'
+  UNION ALL
+  SELECT
+    N'Daily Activities - A1',
+    N'do homework',
+    N'làm bài tập về nhà',
+    N'She does her homework after dinner.'
+
+  /* Travel & Transport - A2 */
+  UNION ALL
+  SELECT
+    N'Travel & Transport - A2',
+    N'boarding pass',
+    N'thẻ lên máy bay',
+    N'Please show your boarding pass and passport.'
+  UNION ALL
+  SELECT
+    N'Travel & Transport - A2',
+    N'check-in',
+    N'làm thủ tục nhận phòng / lên máy bay',
+    N'We need to check in two hours before the flight.'
+  UNION ALL
+  SELECT
+    N'Travel & Transport - A2',
+    N'round trip',
+    N'khứ hồi',
+    N'I bought a round-trip ticket to London.'
+  UNION ALL
+  SELECT
+    N'Travel & Transport - A2',
+    N'luggage',
+    N'hành lý',
+    N'Your luggage is too heavy.'
+  UNION ALL
+  SELECT
+    N'Travel & Transport - A2',
+    N'reservation',
+    N'đặt chỗ (phòng, vé...)',
+    N'I have a reservation under the name Minh.'
+
+  /* Technology - B1 */
+  UNION ALL
+  SELECT
+    N'Technology - B1',
+    N'wireless',
+    N'không dây',
+    N'The office now has a wireless internet connection.'
+  UNION ALL
+  SELECT
+    N'Technology - B1',
+    N'upload',
+    N'tải lên',
+    N'Please upload your assignment to the platform.'
+  UNION ALL
+  SELECT
+    N'Technology - B1',
+    N'password',
+    N'mật khẩu',
+    N'Always keep your password secret.'
+  UNION ALL
+  SELECT
+    N'Technology - B1',
+    N'software',
+    N'phần mềm',
+    N'This software helps students learn English online.'
+  UNION ALL
+  SELECT
+    N'Technology - B1',
+    N'voice recognition',
+    N'nhận dạng giọng nói',
+    N'We use voice recognition to convert speech to text.'
+) v
+  ON t.title = v.topic_title;
+GO
+
+/* =========================================================
    PRONUNCIATION PRACTICE
 ========================================================= */
 CREATE TABLE pronunciation_practice (
