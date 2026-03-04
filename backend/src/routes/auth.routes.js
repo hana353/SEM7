@@ -1,17 +1,9 @@
-const express = require("express");
-const router = express.Router();
-const controller = require("../controllers/auth.controller");
+const router = require("express").Router();
+const authController = require("../controllers/auth.controller");
 
-// POST /api/auth/register - Đăng ký (gửi OTP về mail)
-router.post("/register", controller.register);
-
-// POST /api/auth/verify-otp - Xác thực OTP sau đăng ký
-router.post("/verify-otp", controller.verifyOtp);
-
-// POST /api/auth/login - Đăng nhập (email + mật khẩu)
-router.post("/login", controller.login);
-
-// POST /api/auth/request-login-otp - Gửi OTP đăng nhập về mail (tùy chọn)
-router.post("/request-login-otp", controller.requestLoginOtp);
+router.post("/register", authController.register);
+router.post("/verify-otp", authController.verifyOtp);
+router.post("/login", authController.login);
+router.post("/resend-otp", authController.resendOtp);
 
 module.exports = router;

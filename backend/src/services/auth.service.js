@@ -1,139 +1,176 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { pool, poolConnect, sql } = require("../config/db");
-const { sendOtpEmail } = require("./email.service");
+const { sql, getPool } = require("../config/db");
+const { sendOtpEmail } = require("./email_service");
 
-const OTP_LENGTH = 6;
-const OTP_EXPIRE_MINUTES = parseInt(process.env.OTP_EXPIRE_MINUTES, 10) || 10;
+const OTP_EXPIRE_MINUTES = Number(process.env.OTP_EXPIRE_MINUTES || 5);
 
-function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+// ===== helpers =====
+function generateOtp(length = 6) {
+  let otp = "";
+  for (let i = 0; i < length; i++) otp += Math.floor(Math.random() * 10);
+  return otp;
+}
+function addMinutes(date, minutes) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
 }
 
-async function register(data) {
-  await poolConnect;
-  const { email, password, fullName } = data;
-  if (!email || !password) throw new Error("Email và mật khẩu là bắt buộc");
+async function getUserByEmail(email) {
+  const pool = await getPool();
+  const rs = await pool
+    .request()
+    .input("email", sql.NVarChar, email)
+    .query(`SELECT TOP 1 * FROM users WHERE email=@email AND is_deleted=0`);
+  return rs.recordset[0] || null;
+}
 
-  const existing = await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .query("SELECT Id FROM Users WHERE Email = @Email");
-  if (existing.recordset.length > 0) throw new Error("Email đã được đăng ký");
+async function createOtp(email, type) {
+  const pool = await getPool();
+
+  // Xóa OTP cũ cùng email+type để tránh nhầm + gọn DB
+  await pool
+    .request()
+    .input("email", sql.NVarChar, email)
+    .input("type", sql.NVarChar, type)
+    .query(`DELETE FROM otp_codes WHERE email=@email AND type=@type`);
+
+  const code = generateOtp(6);
+  const expiresAt = addMinutes(new Date(), OTP_EXPIRE_MINUTES);
+
+  await pool
+    .request()
+    .input("email", sql.NVarChar, email)
+    .input("code", sql.NVarChar, code)
+    .input("type", sql.NVarChar, type)
+    .input("expires_at", sql.DateTime2, expiresAt)
+    .query(`
+      INSERT INTO otp_codes(email, code, type, expires_at)
+      VALUES (@email, @code, @type, @expires_at)
+    `);
+
+  return { code, expiresAt };
+}
+
+// ===== services =====
+async function register({ email, password, full_name, phone }) {
+  const pool = await getPool();
+
+  const exists = await getUserByEmail(email);
+  if (exists) throw new Error("Email already exists");
 
   const passwordHash = await bcrypt.hash(password, 10);
-  await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .input("PasswordHash", sql.NVarChar, passwordHash)
-    .input("FullName", sql.NVarChar, fullName || null)
+
+  // STUDENT role_id = 3
+  await pool
+    .request()
+    .input("email", sql.NVarChar, email)
+    .input("password_hash", sql.NVarChar, passwordHash)
+    .input("full_name", sql.NVarChar, full_name)
+    .input("phone", sql.NVarChar, phone || null)
+    .input("role_id", sql.SmallInt, 3)
     .query(`
-      INSERT INTO Users (Email, PasswordHash, FullName, IsVerified)
-      VALUES (@Email, @PasswordHash, @FullName, 0)
+      INSERT INTO users(email, password_hash, full_name, phone, role_id, is_verified)
+      VALUES (@email, @password_hash, @full_name, @phone, @role_id, 0)
     `);
 
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
-  await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .input("Code", sql.NVarChar, otp)
-    .input("Type", sql.NVarChar, "register")
-    .input("ExpiresAt", sql.DateTime2, expiresAt)
-    .query(`
-      INSERT INTO OtpCodes (Email, Code, Type, ExpiresAt)
-      VALUES (@Email, @Code, @Type, @ExpiresAt)
-    `);
+  const { code, expiresAt } = await createOtp(email, "register");
+  await sendOtpEmail(email, code, "register");
 
-  await sendOtpEmail(email, otp, "register");
-  return { message: "Đăng ký thành công. Vui lòng kiểm tra email để lấy mã OTP xác thực.", email };
-}
-
-async function verifyOtp(email, code) {
-  await poolConnect;
-  if (!email || !code) throw new Error("Email và mã OTP là bắt buộc");
-
-  const row = await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .input("Code", sql.NVarChar, code)
-    .input("Now", sql.DateTime2, new Date())
-    .query(`
-      SELECT TOP 1 Id FROM OtpCodes
-      WHERE Email = @Email AND Code = @Code AND Type = 'register' AND ExpiresAt > @Now
-      ORDER BY CreatedAt DESC
-    `);
-  if (row.recordset.length === 0) throw new Error("Mã OTP không hợp lệ hoặc đã hết hạn");
-
-  await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .query("UPDATE Users SET IsVerified = 1, UpdatedAt = GETUTCDATE() WHERE Email = @Email");
-
-  await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .input("Code", sql.NVarChar, code)
-    .query("DELETE FROM OtpCodes WHERE Email = @Email AND Code = @Code");
-
-  return { message: "Xác thực thành công. Bạn có thể đăng nhập." };
-}
-
-async function login(email, password) {
-  await poolConnect;
-  if (!email || !password) throw new Error("Email và mật khẩu là bắt buộc");
-
-  const result = await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .query("SELECT Id, Email, PasswordHash, FullName, IsVerified FROM Users WHERE Email = @Email");
-  const user = result.recordset[0];
-  if (!user) throw new Error("Email hoặc mật khẩu không đúng");
-
-  const valid = await bcrypt.compare(password, user.PasswordHash);
-  if (!valid) throw new Error("Email hoặc mật khẩu không đúng");
-
-  if (!user.IsVerified) throw new Error("Tài khoản chưa xác thực. Vui lòng kiểm tra email để lấy mã OTP.");
-
-  const token = jwt.sign(
-    { userId: user.Id, email: user.Email },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
   return {
-    message: "Đăng nhập thành công",
-    token,
-    user: {
-      id: user.Id,
-      email: user.Email,
-      fullName: user.FullName
-    }
+    message: "Registered. OTP sent to email.",
+    email,
+    otp_expires_at: expiresAt,
   };
 }
 
-async function requestLoginOtp(email) {
-  await poolConnect;
-  if (!email) throw new Error("Email là bắt buộc");
+async function verifyOtp({ email, code, type = "register" }) {
+  const pool = await getPool();
 
-  const result = await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .query("SELECT Id, IsVerified FROM Users WHERE Email = @Email");
-  const user = result.recordset[0];
-  if (!user) throw new Error("Email chưa đăng ký");
-  if (!user.IsVerified) throw new Error("Tài khoản chưa xác thực. Vui lòng xác thực qua OTP đăng ký trước.");
-
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + OTP_EXPIRE_MINUTES * 60 * 1000);
-  await pool.request()
-    .input("Email", sql.NVarChar, email)
-    .input("Code", sql.NVarChar, otp)
-    .input("Type", sql.NVarChar, "login")
-    .input("ExpiresAt", sql.DateTime2, expiresAt)
+  const rs = await pool
+    .request()
+    .input("email", sql.NVarChar, email)
+    .input("type", sql.NVarChar, type)
     .query(`
-      INSERT INTO OtpCodes (Email, Code, Type, ExpiresAt)
-      VALUES (@Email, @Code, @Type, @ExpiresAt)
+      SELECT TOP 1 *
+      FROM otp_codes
+      WHERE email=@email AND type=@type
+      ORDER BY created_at DESC
     `);
 
-  await sendOtpEmail(email, otp, "login");
-  return { message: "Mã OTP đã gửi đến email của bạn.", email };
+  const row = rs.recordset[0];
+  if (!row) throw new Error("OTP not found");
+
+  const now = new Date();
+  if (row.used_at) throw new Error("OTP already used");
+  if (now > new Date(row.expires_at)) throw new Error("OTP expired");
+  if (String(row.code).trim() !== String(code).trim()) throw new Error("Invalid OTP");
+
+  // mark OTP used
+  await pool
+    .request()
+    .input("id", sql.UniqueIdentifier, row.id)
+    .query(`UPDATE otp_codes SET used_at = SYSUTCDATETIME() WHERE id=@id`);
+
+  if (type === "register") {
+    await pool
+      .request()
+      .input("email", sql.NVarChar, email)
+      .query(`
+        UPDATE users
+        SET is_verified = 1,
+            updated_at = SYSDATETIMEOFFSET()
+        WHERE email=@email AND is_deleted=0
+      `);
+  }
+
+  return { message: "OTP verified successfully." };
+}
+
+async function login({ email, password }) {
+  const user = await getUserByEmail(email);
+  if (!user) throw new Error("Invalid credentials");
+
+  if (!user.is_active || user.is_deleted) throw new Error("User is inactive");
+  if (!user.is_verified) throw new Error("Email not verified");
+
+  const ok = await bcrypt.compare(password, user.password_hash);
+  if (!ok) throw new Error("Invalid credentials");
+
+  const token = jwt.sign(
+    { sub: user.id, email: user.email, role_id: user.role_id },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+  );
+
+  return {
+    message: "Login success",
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name,
+      role_id: user.role_id,
+    },
+  };
+}
+
+async function resendOtp({ email, type = "register" }) {
+  const user = await getUserByEmail(email);
+  if (!user) throw new Error("User not found");
+
+  if (type === "register" && user.is_verified) {
+    throw new Error("User already verified");
+  }
+
+  const { code, expiresAt } = await createOtp(email, type);
+  await sendOtpEmail(email, code, type);
+
+  return { message: "OTP resent.", email, otp_expires_at: expiresAt };
 }
 
 module.exports = {
   register,
   verifyOtp,
   login,
-  requestLoginOtp
+  resendOtp,
 };
