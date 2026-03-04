@@ -100,8 +100,8 @@ export default function SignupForm() {
       }
 
       setInfo(data?.message || "Xác thực thành công");
-
-      navigate("/studenthomepage");
+      // Verify OTP chỉ xác thực email; chưa có token -> quay về trang login để đăng nhập.
+      navigate("/", { replace: true });
     } catch (err) {
       if (err?.name === "TypeError" && String(err?.message).includes("fetch")) {
         setError(

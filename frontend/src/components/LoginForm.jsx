@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getHomeRouteByRole } from "../auth/roleRoutes";
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
 
@@ -40,7 +41,8 @@ export default function LoginForm() {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
 
-      navigate("/studenthomepage");
+      const roleCode = data?.user?.role_code || null;
+      navigate(getHomeRouteByRole(roleCode), { replace: true });
     } catch (err) {
       if (err?.name === "TypeError" && String(err?.message).includes("fetch")) {
         setError(

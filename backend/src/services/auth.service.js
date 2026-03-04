@@ -20,7 +20,14 @@ async function getUserByEmail(email) {
   const rs = await pool
     .request()
     .input("email", sql.NVarChar, email)
-    .query(`SELECT TOP 1 * FROM users WHERE email=@email AND is_deleted=0`);
+    .query(`
+      SELECT TOP 1
+        u.*,
+        r.code AS role_code
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE u.email=@email AND u.is_deleted=0
+    `);
   return rs.recordset[0] || null;
 }
 
@@ -137,7 +144,7 @@ async function login({ email, password }) {
   if (!ok) throw new Error("Invalid credentials");
 
   const token = jwt.sign(
-    { sub: user.id, email: user.email, role_id: user.role_id },
+    { sub: user.id, email: user.email, role_id: user.role_id, role_code: user.role_code },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
   );
@@ -150,6 +157,7 @@ async function login({ email, password }) {
       email: user.email,
       full_name: user.full_name,
       role_id: user.role_id,
+      role_code: user.role_code,
     },
   };
 }

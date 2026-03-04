@@ -9,10 +9,12 @@ async function requireAuth(req, res, next) {
     if (!token) return res.status(401).json({ message: "Missing token" });
 
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = payload?.sub || payload?.userId || payload?.id;
+    if (!userId) return res.status(401).json({ message: "Invalid token payload" });
 
     await poolConnect;
     const rs = await pool.request()
-      .input("id", sql.UniqueIdentifier, payload.userId)
+      .input("id", sql.UniqueIdentifier, userId)
       .query(`
         SELECT u.id, u.email, u.full_name, u.role_id, r.code AS role_code
         FROM users u

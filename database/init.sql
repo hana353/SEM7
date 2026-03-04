@@ -209,3 +209,29 @@ END
 ALTER TABLE courses ADD created_by UNIQUEIDENTIFIER NULL;
 ALTER TABLE courses ADD CONSTRAINT FK_courses_created_by FOREIGN KEY (created_by) REFERENCES users(id);
 
+/* =========================================================
+   DEFAULT ADMIN ACCOUNT (email: admin@gmail.com / pass: Admin@123)
+========================================================= */
+
+IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@gmail.com')
+BEGIN
+    INSERT INTO users (
+        email,
+        password_hash,
+        full_name,
+        role_id,
+        is_verified,
+        is_active,
+        is_deleted
+    )
+    VALUES (
+        'admin@gmail.com',
+        '$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG', -- bcrypt hash cho 'Admin@123'
+        'System Admin',
+        1,                -- role_id = ADMIN
+        1,                -- verified
+        1,                -- active
+        0                 -- not deleted
+    );
+END
+GO
