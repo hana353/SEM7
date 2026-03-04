@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { sql, getPool } = require("../config/db");
-const { sendOtpEmail } = require("./email_service");
+const { sendOtpEmail } = require("./email.service");
 
 const OTP_EXPIRE_MINUTES = Number(process.env.OTP_EXPIRE_MINUTES || 5);
 

@@ -196,3 +196,16 @@ CREATE TABLE payments (
     created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_payments_created_at DEFAULT SYSDATETIMEOFFSET()
 );
 GO
+
+IF NOT EXISTS (SELECT 1 FROM roles WHERE id = 1)
+BEGIN
+  INSERT INTO roles (id, code, description) VALUES
+  (1, 'ADMIN',   'System administrator'),
+  (2, 'TEACHER', 'Course creator'),
+  (3, 'STUDENT', 'Learner'),
+  (4, 'GUEST',   'Unauthenticated user');
+END
+
+ALTER TABLE courses ADD created_by UNIQUEIDENTIFIER NULL;
+ALTER TABLE courses ADD CONSTRAINT FK_courses_created_by FOREIGN KEY (created_by) REFERENCES users(id);
+

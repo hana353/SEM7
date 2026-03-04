@@ -1,23 +1,22 @@
+// src/config/db.js
 const sql = require("mssql");
 
 const config = {
-  server: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  server: process.env.DB_SERVER, // ví dụ: "localhost"
+  database: process.env.DB_NAME, // "SEM7"
   options: {
-    encrypt: String(process.env.DB_ENCRYPT).toLowerCase() === "true",
+    encrypt: false,
     trustServerCertificate: true,
   },
-  pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
 };
 
-let pool;
+const pool = new sql.ConnectionPool(config);
+const poolConnect = pool.connect();
 
-async function getPool() {
-  if (pool) return pool;
-  pool = await sql.connect(config);
-  return pool;
-}
+pool.on("error", (err) => {
+  console.error("SQL Pool Error:", err);
+});
 
-module.exports = { sql, getPool };
+module.exports = { sql, pool, poolConnect };
