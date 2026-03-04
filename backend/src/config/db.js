@@ -1,26 +1,23 @@
 const sql = require("mssql");
 
 const config = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
   server: process.env.DB_SERVER,
   database: process.env.DB_NAME,
-  port: 1433,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   options: {
-    encrypt: false,
-    trustServerCertificate: true
-  }
+    encrypt: String(process.env.DB_ENCRYPT).toLowerCase() === "true",
+    trustServerCertificate: true,
+  },
+  pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
 };
 
-const pool = new sql.ConnectionPool(config);
-const poolConnect = pool.connect();
+let pool;
 
-poolConnect
-  .then(() => console.log("Connected to SQL Server"))
-  .catch(err => console.error("Database Connection Failed!", err));
+async function getPool() {
+  if (pool) return pool;
+  pool = await sql.connect(config);
+  return pool;
+}
 
-module.exports = {
-  sql,
-  pool,
-  poolConnect
-};
+module.exports = { sql, getPool };
