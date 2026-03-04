@@ -1,0 +1,56 @@
+{
+  "info": {
+    "name": "Auth API - English Center",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Register",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"phamminhtuan171204@gmail.com\",\n  \"password\": \"yourPassword123\",\n  \"fullName\": \"Pham Minh Tuan\"\n}"
+        },
+        "url": "http://localhost:5000/api/auth/register"
+      }
+    },
+    {
+      "name": "Verify OTP",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"phamminhtuan171204@gmail.com\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": "http://localhost:5000/api/auth/verify-otp"
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"phamminhtuan171204@gmail.com\",\n  \"password\": \"yourPassword123\"\n}"
+        },
+        "url": "http://localhost:5000/api/auth/login"
+      }
+    },
+    {
+      "name": "Request Login OTP",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"phamminhtuan171204@gmail.com\"\n}"
+        },
+        "url": "http://localhost:5000/api/auth/request-login-otp"
+      }
+    }
+  ]
+}

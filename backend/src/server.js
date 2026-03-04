@@ -2,21 +2,20 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
+const authRoutes = require("./routes/auth.routes");
+
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Test API
-app.get("/", (req, res) => {
-  res.send("English Center API Running...");
-});
-
-// Test route
 app.get("/", (req, res) => {
   res.send("English Center Backend is Running...");
 });
+
+// Auth API (đăng ký, đăng nhập, OTP)
+app.use("/api/auth", authRoutes);
 
 // Port
 const PORT = process.env.PORT || 5000;
