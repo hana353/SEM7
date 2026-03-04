@@ -26,7 +26,7 @@ CREATE TABLE roles (
 GO
 
 /* =========================================================
-   USERS  (ADD is_verified for OTP flow)
+   USERS (ADD is_verified for OTP flow)
 ========================================================= */
 CREATE TABLE users (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
@@ -36,9 +36,9 @@ CREATE TABLE users (
     phone NVARCHAR(20),
     role_id SMALLINT NOT NULL REFERENCES roles(id),
 
-    is_verified BIT NOT NULL CONSTRAINT DF_users_is_verified DEFAULT 0, -- NEW
-    is_active BIT NOT NULL CONSTRAINT DF_users_is_active DEFAULT 1,
-    is_deleted BIT NOT NULL CONSTRAINT DF_users_is_deleted DEFAULT 0,
+    is_verified BIT NOT NULL CONSTRAINT DF_users_is_verified DEFAULT 0,
+    is_active   BIT NOT NULL CONSTRAINT DF_users_is_active   DEFAULT 1,
+    is_deleted  BIT NOT NULL CONSTRAINT DF_users_is_deleted  DEFAULT 0,
 
     created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_users_created_at DEFAULT SYSDATETIMEOFFSET(),
     updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_users_updated_at DEFAULT SYSDATETIMEOFFSET()
@@ -46,8 +46,7 @@ CREATE TABLE users (
 GO
 
 /* =========================================================
-   OTP CODES (NEW)
-   - used for register/login OTP
+   OTP CODES
 ========================================================= */
 CREATE TABLE otp_codes (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
@@ -79,6 +78,12 @@ CREATE TABLE courses (
 );
 GO
 
+/* creator tracking (as you had) */
+ALTER TABLE courses ADD created_by UNIQUEIDENTIFIER NULL;
+ALTER TABLE courses ADD CONSTRAINT FK_courses_created_by
+FOREIGN KEY (created_by) REFERENCES users(id);
+GO
+
 /* =========================================================
    LECTURES
 ========================================================= */
@@ -106,50 +111,152 @@ CREATE TABLE enrollments (
 GO
 
 /* =========================================================
-   QUIZZES
+   FLASHCARD QUIZZES (NEW)
 ========================================================= */
-CREATE TABLE quizzes (
+CREATE TABLE quiz_sets (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    course_id UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id),
+    teacher_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
+    course_id UNIQUEIDENTIFIER NULL REFERENCES courses(id),
+
     title NVARCHAR(255) NOT NULL,
-    passing_score DECIMAL(5,2) NOT NULL
+    description NVARCHAR(MAX) NULL,
+
+    status NVARCHAR(20) NOT NULL CONSTRAINT DF_quiz_sets_status DEFAULT 'DRAFT', -- DRAFT|PUBLISHED|ARCHIVED
+    is_deleted BIT NOT NULL CONSTRAINT DF_quiz_sets_is_deleted DEFAULT 0,
+
+    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_sets_created_at DEFAULT SYSDATETIMEOFFSET(),
+    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_sets_updated_at DEFAULT SYSDATETIMEOFFSET()
 );
 GO
 
-/* =========================================================
-   QUIZ QUESTIONS
-========================================================= */
-CREATE TABLE quiz_questions (
+CREATE INDEX IX_quiz_sets_course_status
+ON quiz_sets(course_id, status)
+WHERE is_deleted = 0;
+GO
+
+CREATE TABLE quiz_cards (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    quiz_id UNIQUEIDENTIFIER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-    question NVARCHAR(MAX) NOT NULL,
-    option_a NVARCHAR(255) NOT NULL,
-    option_b NVARCHAR(255) NOT NULL,
-    option_c NVARCHAR(255) NOT NULL,
-    option_d NVARCHAR(255) NOT NULL,
-    correct_answer CHAR(1) NOT NULL
+    quiz_set_id UNIQUEIDENTIFIER NOT NULL REFERENCES quiz_sets(id) ON DELETE CASCADE,
+
+    front_text NVARCHAR(MAX) NOT NULL,
+    back_text  NVARCHAR(MAX) NOT NULL,
+    front_image_url NVARCHAR(500) NULL,
+    back_image_url  NVARCHAR(500) NULL,
+
+    position INT NOT NULL CONSTRAINT DF_quiz_cards_position DEFAULT 0,
+    is_deleted BIT NOT NULL CONSTRAINT DF_quiz_cards_is_deleted DEFAULT 0,
+
+    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_cards_created_at DEFAULT SYSDATETIMEOFFSET(),
+    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_cards_updated_at DEFAULT SYSDATETIMEOFFSET()
 );
 GO
 
+CREATE INDEX IX_quiz_cards_set_position
+ON quiz_cards(quiz_set_id, position)
+WHERE is_deleted = 0;
+GO
+
 /* =========================================================
-   QUIZ ATTEMPTS + ANSWERS
+   TESTS / EXAMS (NEW)
 ========================================================= */
-CREATE TABLE quiz_attempts (
+CREATE TABLE tests (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    quiz_id UNIQUEIDENTIFIER NOT NULL REFERENCES quizzes(id),
+    teacher_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
+    course_id UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id),
+
+    title NVARCHAR(255) NOT NULL,
+    description NVARCHAR(MAX) NULL,
+
+    duration_minutes INT NULL,
+    max_attempts INT NULL, -- NULL = unlimited
+
+    shuffle_questions BIT NOT NULL CONSTRAINT DF_tests_shuffle_questions DEFAULT 0,
+    shuffle_choices   BIT NOT NULL CONSTRAINT DF_tests_shuffle_choices DEFAULT 0,
+
+    status NVARCHAR(20) NOT NULL CONSTRAINT DF_tests_status DEFAULT 'DRAFT', -- DRAFT|PUBLISHED|CLOSED
+    open_at DATETIMEOFFSET NULL,
+    close_at DATETIMEOFFSET NULL,
+
+    is_deleted BIT NOT NULL CONSTRAINT DF_tests_is_deleted DEFAULT 0,
+    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_tests_created_at DEFAULT SYSDATETIMEOFFSET(),
+    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_tests_updated_at DEFAULT SYSDATETIMEOFFSET()
+);
+GO
+
+CREATE INDEX IX_tests_course_status
+ON tests(course_id, status)
+WHERE is_deleted = 0;
+GO
+
+CREATE TABLE test_questions (
+    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    test_id UNIQUEIDENTIFIER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+
+    question_text NVARCHAR(MAX) NOT NULL,
+    points DECIMAL(6,2) NOT NULL CONSTRAINT DF_test_questions_points DEFAULT 1,
+    position INT NOT NULL CONSTRAINT DF_test_questions_position DEFAULT 0,
+
+    is_deleted BIT NOT NULL CONSTRAINT DF_test_questions_is_deleted DEFAULT 0,
+    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_questions_created_at DEFAULT SYSDATETIMEOFFSET(),
+    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_questions_updated_at DEFAULT SYSDATETIMEOFFSET()
+);
+GO
+
+CREATE INDEX IX_test_questions_test_position
+ON test_questions(test_id, position)
+WHERE is_deleted = 0;
+GO
+
+CREATE TABLE test_choices (
+    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    question_id UNIQUEIDENTIFIER NOT NULL REFERENCES test_questions(id) ON DELETE CASCADE,
+
+    choice_text NVARCHAR(MAX) NOT NULL,
+    is_correct BIT NOT NULL CONSTRAINT DF_test_choices_is_correct DEFAULT 0,
+    position INT NOT NULL CONSTRAINT DF_test_choices_position DEFAULT 0,
+
+    is_deleted BIT NOT NULL CONSTRAINT DF_test_choices_is_deleted DEFAULT 0
+);
+GO
+
+CREATE INDEX IX_test_choices_question_position
+ON test_choices(question_id, position)
+WHERE is_deleted = 0;
+GO
+
+CREATE TABLE test_attempts (
+    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    test_id UNIQUEIDENTIFIER NOT NULL REFERENCES tests(id),
     student_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    score DECIMAL(5,2) NOT NULL CONSTRAINT DF_quiz_attempts_score DEFAULT 0,
-    submitted_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_attempts_submitted_at DEFAULT SYSDATETIMEOFFSET()
+
+    started_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_attempts_started_at DEFAULT SYSDATETIMEOFFSET(),
+    submitted_at DATETIMEOFFSET NULL,
+
+    status NVARCHAR(20) NOT NULL CONSTRAINT DF_test_attempts_status DEFAULT 'IN_PROGRESS', -- IN_PROGRESS|SUBMITTED|GRADED
+    score DECIMAL(6,2) NULL,
+    max_score DECIMAL(6,2) NULL
 );
 GO
 
-CREATE TABLE quiz_answers (
+CREATE INDEX IX_test_attempts_test_student
+ON test_attempts(test_id, student_id, started_at DESC);
+GO
+
+CREATE TABLE test_attempt_answers (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    attempt_id UNIQUEIDENTIFIER NOT NULL REFERENCES quiz_attempts(id) ON DELETE CASCADE,
-    question_id UNIQUEIDENTIFIER NOT NULL REFERENCES quiz_questions(id),
-    selected_answer CHAR(1) NOT NULL,
-    is_correct BIT NOT NULL
+    attempt_id UNIQUEIDENTIFIER NOT NULL REFERENCES test_attempts(id) ON DELETE CASCADE,
+    question_id UNIQUEIDENTIFIER NOT NULL REFERENCES test_questions(id),
+    choice_id UNIQUEIDENTIFIER NULL REFERENCES test_choices(id),
+
+    is_correct BIT NULL,
+    points_earned DECIMAL(6,2) NULL,
+
+    CONSTRAINT UQ_attempt_question UNIQUE(attempt_id, question_id)
 );
+GO
+
+CREATE INDEX IX_attempt_answers_attempt
+ON test_attempt_answers(attempt_id);
 GO
 
 /* =========================================================
@@ -168,122 +275,6 @@ CREATE TABLE vocabularies (
     meaning NVARCHAR(MAX),
     example_sentence NVARCHAR(MAX)
 );
-GO
-
-/* =========================================================
-   SAMPLE DATA - VOCABULARY TOPICS & WORDS
-   (Data mẫu phục vụ demo giao diện admin / luyện từ vựng)
-========================================================= */
-
-INSERT INTO vocabulary_topics (title)
-VALUES
-  (N'Daily Activities - A1'),
-  (N'Travel & Transport - A2'),
-  (N'Technology - B1');
-
-INSERT INTO vocabularies (topic_id, word, meaning, example_sentence)
-SELECT t.id,
-       v.word,
-       v.meaning,
-       v.example_sentence
-FROM vocabulary_topics t
-JOIN (
-  /* Daily Activities - A1 */
-  SELECT
-    N'Daily Activities - A1'              AS topic_title,
-    N'wake up'                            AS word,
-    N'thức dậy'                           AS meaning,
-    N'I usually wake up at 6 a.m.'        AS example_sentence
-  UNION ALL
-  SELECT
-    N'Daily Activities - A1',
-    N'brush teeth',
-    N'đánh răng',
-    N'Children should brush their teeth twice a day.'
-  UNION ALL
-  SELECT
-    N'Daily Activities - A1',
-    N'have breakfast',
-    N'ăn sáng',
-    N'We have breakfast together every morning.'
-  UNION ALL
-  SELECT
-    N'Daily Activities - A1',
-    N'go to school',
-    N'đi học',
-    N'The kids go to school by bus.'
-  UNION ALL
-  SELECT
-    N'Daily Activities - A1',
-    N'do homework',
-    N'làm bài tập về nhà',
-    N'She does her homework after dinner.'
-
-  /* Travel & Transport - A2 */
-  UNION ALL
-  SELECT
-    N'Travel & Transport - A2',
-    N'boarding pass',
-    N'thẻ lên máy bay',
-    N'Please show your boarding pass and passport.'
-  UNION ALL
-  SELECT
-    N'Travel & Transport - A2',
-    N'check-in',
-    N'làm thủ tục nhận phòng / lên máy bay',
-    N'We need to check in two hours before the flight.'
-  UNION ALL
-  SELECT
-    N'Travel & Transport - A2',
-    N'round trip',
-    N'khứ hồi',
-    N'I bought a round-trip ticket to London.'
-  UNION ALL
-  SELECT
-    N'Travel & Transport - A2',
-    N'luggage',
-    N'hành lý',
-    N'Your luggage is too heavy.'
-  UNION ALL
-  SELECT
-    N'Travel & Transport - A2',
-    N'reservation',
-    N'đặt chỗ (phòng, vé...)',
-    N'I have a reservation under the name Minh.'
-
-  /* Technology - B1 */
-  UNION ALL
-  SELECT
-    N'Technology - B1',
-    N'wireless',
-    N'không dây',
-    N'The office now has a wireless internet connection.'
-  UNION ALL
-  SELECT
-    N'Technology - B1',
-    N'upload',
-    N'tải lên',
-    N'Please upload your assignment to the platform.'
-  UNION ALL
-  SELECT
-    N'Technology - B1',
-    N'password',
-    N'mật khẩu',
-    N'Always keep your password secret.'
-  UNION ALL
-  SELECT
-    N'Technology - B1',
-    N'software',
-    N'phần mềm',
-    N'This software helps students learn English online.'
-  UNION ALL
-  SELECT
-    N'Technology - B1',
-    N'voice recognition',
-    N'nhận dạng giọng nói',
-    N'We use voice recognition to convert speech to text.'
-) v
-  ON t.title = v.topic_title;
 GO
 
 /* =========================================================
@@ -313,6 +304,9 @@ CREATE TABLE payments (
 );
 GO
 
+/* =========================================================
+   SEED ROLES (NO SAMPLE VOCAB DATA)
+========================================================= */
 IF NOT EXISTS (SELECT 1 FROM roles WHERE id = 1)
 BEGIN
   INSERT INTO roles (id, code, description) VALUES
@@ -321,14 +315,11 @@ BEGIN
   (3, 'STUDENT', 'Learner'),
   (4, 'GUEST',   'Unauthenticated user');
 END
-
-ALTER TABLE courses ADD created_by UNIQUEIDENTIFIER NULL;
-ALTER TABLE courses ADD CONSTRAINT FK_courses_created_by FOREIGN KEY (created_by) REFERENCES users(id);
+GO
 
 /* =========================================================
    DEFAULT ADMIN ACCOUNT (email: admin@gmail.com / pass: Admin@123)
 ========================================================= */
-
 IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@gmail.com')
 BEGIN
     INSERT INTO users (
@@ -342,12 +333,12 @@ BEGIN
     )
     VALUES (
         'admin@gmail.com',
-        '$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG', -- bcrypt hash cho 'Admin@123'
+        '$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG',
         'System Admin',
-        1,                -- role_id = ADMIN
-        1,                -- verified
-        1,                -- active
-        0                 -- not deleted
+        1,
+        1,
+        1,
+        0
     );
 END
 GO
