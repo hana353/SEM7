@@ -6,6 +6,7 @@ const authRoutes = require("./routes/auth.routes");
 const courseRoutes = require("./routes/course.routes");
 const userRoutes = require("./routes/user.routes");
 const quizRoutes = require("./routes/quiz.routes");
+const testRoutes = require("./routes/test.routes");
 const { ensureSchema } = require("./config/db");
 
 const app = express();
@@ -16,6 +17,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/quizzes", quizRoutes);
+app.use("/api/tests", testRoutes);
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
