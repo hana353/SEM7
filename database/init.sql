@@ -291,17 +291,60 @@ CREATE TABLE pronunciation_practice (
 GO
 
 /* =========================================================
-   PAYMENTS
+   PAYMENTS (UPDATED FOR VNPAY)
+   - enrollment_id: NULL (create enrollment after success)
+   - txn_ref: unique code sent to VNPay (vnp_TxnRef)
+   - VNPay response fields for reconciliation
 ========================================================= */
 CREATE TABLE payments (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+
     student_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    course_id UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id),
-    enrollment_id UNIQUEIDENTIFIER NOT NULL REFERENCES enrollments(id),
+    course_id  UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id),
+
+    enrollment_id UNIQUEIDENTIFIER NULL REFERENCES enrollments(id),
+
+    payment_method NVARCHAR(30) NOT NULL CONSTRAINT DF_payments_method DEFAULT 'VNPAY',
+
+    -- internal order code -> map to vnp_TxnRef
+    txn_ref NVARCHAR(100) NOT NULL,
+
+    order_info NVARCHAR(255) NULL,
     amount DECIMAL(12,2) NOT NULL,
-    status NVARCHAR(20) NOT NULL,
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_payments_created_at DEFAULT SYSDATETIMEOFFSET()
+
+    -- system status
+    status NVARCHAR(20) NOT NULL CONSTRAINT DF_payments_status DEFAULT 'PENDING',
+
+    -- VNPay returned fields
+    vnp_transaction_no NVARCHAR(50)  NULL,  -- vnp_TransactionNo
+    bank_code          NVARCHAR(50)  NULL,  -- vnp_BankCode
+    bank_tran_no       NVARCHAR(100) NULL,  -- vnp_BankTranNo
+    card_type          NVARCHAR(50)  NULL,  -- vnp_CardType
+    response_code      NVARCHAR(10)  NULL,  -- vnp_ResponseCode
+    transaction_status NVARCHAR(10)  NULL,  -- vnp_TransactionStatus
+    pay_date           DATETIMEOFFSET NULL, -- parsed from vnp_PayDate (yyyyMMddHHmmss)
+
+    -- raw gateway payload (return/ipn) for debugging
+    gateway_response NVARCHAR(MAX) NULL,
+
+    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_payments_created_at DEFAULT SYSDATETIMEOFFSET(),
+    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_payments_updated_at DEFAULT SYSDATETIMEOFFSET(),
+
+    CONSTRAINT UQ_payments_txn_ref UNIQUE (txn_ref),
+
+    CONSTRAINT CHK_payments_status CHECK (
+        status IN ('PENDING','SUCCESS','FAILED','CANCELLED','EXPIRED','REFUNDED')
+    )
 );
+GO
+
+CREATE INDEX IX_payments_student_course ON payments(student_id, course_id);
+GO
+
+CREATE INDEX IX_payments_status ON payments(status);
+GO
+
+CREATE INDEX IX_payments_created_at ON payments(created_at DESC);
 GO
 
 /* =========================================================
