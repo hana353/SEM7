@@ -1,4 +1,3 @@
-// src/controllers/user.controller.js
 const userService = require("../services/user.service");
 
 function bad(res, message, status = 400) {
@@ -11,41 +10,6 @@ exports.getAllUsers = async (req, res) => {
     return res.json({ data: users });
   } catch (err) {
     return bad(res, err.message || "Failed to fetch users", 500);
-  }
-};
-
-// ✅ NEW: GET /api/users/:id
-exports.getUserDetail = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!id) return bad(res, "Missing user id");
-
-    const user = await userService.getUserById(id);
-    return res.json({ data: user });
-  } catch (err) {
-    // not found -> 404
-    const msg = err.message || "Failed to fetch user detail";
-    const status = msg.toLowerCase().includes("not found") ? 404 : 400;
-    return bad(res, msg, status);
-  }
-};
-
-// ✅ NEW: PATCH /api/users/:id
-exports.updateUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!id) return bad(res, "Missing user id");
-
-    const payload = req.body || {};
-    // Nếu muốn chặt hơn thì whitelist field tại đây cũng được
-    const user = await userService.updateUser(id, payload);
-
-    return res.json({
-      message: "User updated",
-      data: user,
-    });
-  } catch (err) {
-    return bad(res, err.message || "Failed to update user");
   }
 };
 
@@ -78,3 +42,21 @@ exports.softDeleteUser = async (req, res) => {
     return bad(res, err.message || "Failed to disable user");
   }
 };
+
+exports.getUserDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return bad(res, "Missing user id");
+
+    // Kiểm tra nếu người dùng chỉ lấy hồ sơ của chính mình (tùy chọn bảo mật)
+    if (String(req.user.id) !== String(id)) {
+      return bad(res, "Unauthorized", 403);
+    }
+
+    const user = await userService.getUserById(id); // Giả sử hàm này tồn tại trong user.service.js
+    return res.json({ data: user });
+  } catch (err) {
+    return bad(res, err.message || "Failed to fetch user details", 500);
+  }
+};
+

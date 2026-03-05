@@ -7,6 +7,8 @@ const { requireAuth, requireRole } = require("../middleware/auth.middleware");
 
 // Public
 router.get("/", controller.getAll);
+// Teacher: danh sách khóa được admin gán
+router.get("/teacher/assigned", requireAuth, requireRole("TEACHER"), controller.getAssignedToTeacher);
 router.get("/:id", controller.getById);
 
 // Admin: create

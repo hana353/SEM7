@@ -152,6 +152,12 @@ module.exports = {
     if (!title) throw new Error("title là bắt buộc");
     if (!payload.course_id) throw new Error("course_id là bắt buộc");
 
+    const c = await pool.request()
+      .input("course_id", sql.UniqueIdentifier, payload.course_id)
+      .input("teacher_id", sql.UniqueIdentifier, teacherId)
+      .query(`SELECT id FROM courses WHERE id = @course_id AND teacher_id = @teacher_id AND (status IS NULL OR status <> 'DELETED')`);
+    if (c.recordset.length === 0) throw new Error("Khóa học không tồn tại hoặc không được gán cho giáo viên này");
+
     const status = normalizeStatus(payload.status || "DRAFT");
 
     const rs = await pool

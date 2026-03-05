@@ -25,3 +25,25 @@ export function clearSession() {
   localStorage.removeItem("user");
 }
 
+// Thêm hàm này để lấy userId từ user object
+export function getUserId() {
+  const user = getStoredUser();
+  return user?._id || user?.id || null;
+}
+
+// Hàm getSession để backward compatibility
+export const getSession = () => {
+  const user = getStoredUser();
+  if (!user) return null;
+  return {
+    userId: user._id || user.id,
+    user: user
+  };
+};
+
+export const setSession = (data) => {
+  localStorage.setItem("session", JSON.stringify(data));
+};
+
+
+

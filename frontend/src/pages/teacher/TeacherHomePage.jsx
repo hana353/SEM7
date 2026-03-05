@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { clearSession, getStoredUser } from "../../auth/session";
 import { useNavigate } from "react-router-dom";
+import api from "../../api/axios";
 
 const sidebarItems = [
   { id: "dashboard", label: "Tổng quan" },
@@ -11,229 +12,109 @@ const sidebarItems = [
   { id: "profile", label: "Hồ sơ giảng dạy" },
 ];
 
-const mockSummary = {
-  totalCourses: 5,
-  activeStudents: 62,
-  monthlyRevenue: "18.200.000đ",
-  pendingApproval: 1,
-};
-
-const mockTeacherCourses = [
-  {
-    id: 1,
-    title: "Speaking for Beginners",
-    status: "Đang bán",
-    students: 24,
-    rating: 4.7,
-    price: "450.000đ",
-  },
-  {
-    id: 2,
-    title: "IELTS Reading Intensive 5.0+",
-    status: "Đang bán",
-    students: 18,
-    rating: 4.5,
-    price: "690.000đ",
-  },
-  {
-    id: 3,
-    title: "Pronunciation Basics",
-    status: "Đang bán",
-    students: 12,
-    rating: 4.8,
-    price: "390.000đ",
-  },
-  {
-    id: 4,
-    title: "Business English Basics",
-    status: "Chờ duyệt",
-    students: 0,
-    rating: null,
-    price: "520.000đ",
-  },
-];
-
-const mockLectures = [
-  {
-    id: 1,
-    course: "Speaking for Beginners",
-    title: "Unit 1 - Greetings & Introductions",
-    duration: "18 phút",
-    order: 1,
-  },
-  {
-    id: 2,
-    course: "Speaking for Beginners",
-    title: "Unit 2 - Daily Activities",
-    duration: "22 phút",
-    order: 2,
-  },
-  {
-    id: 3,
-    course: "IELTS Reading Intensive 5.0+",
-    title: "Lesson 1 - Question types overview",
-    duration: "25 phút",
-    order: 1,
-  },
-];
-
-const mockStudents = [
-  {
-    id: 1,
-    name: "Nguyễn Văn Học",
-    course: "Speaking for Beginners",
-    progress: 60,
-  },
-  {
-    id: 2,
-    name: "Trần Thị Luyện",
-    course: "IELTS Reading Intensive 5.0+",
-    progress: 30,
-  },
-  {
-    id: 3,
-    name: "Lê Minh Tiến",
-    course: "Pronunciation Basics",
-    progress: 80,
-  },
-];
-
-const mockRevenue = {
-  availableToWithdraw: "12.500.000đ",
-  totalThisMonth: "18.200.000đ",
-  lastPayout: "4.000.000đ (02/03/2026)",
-};
-
-const mockPayouts = [
-  {
-    id: 1,
-    date: "15/02/2026",
-    amount: "3.500.000đ",
-    status: "Hoàn thành",
-  },
-  {
-    id: 2,
-    date: "01/02/2026",
-    amount: "2.800.000đ",
-    status: "Hoàn thành",
-  },
-];
-
-function SummaryCards() {
+function SummaryCards({ totalCourses = 0, stats = {} }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <div className="rounded-xl bg-white shadow-sm border border-slate-100 p-4">
-        <p className="text-xs font-medium text-slate-500">Khóa học đã tạo</p>
+        <p className="text-xs font-medium text-slate-500">Khóa học được gán</p>
         <p className="mt-2 text-2xl font-semibold text-slate-900">
-          {mockSummary.totalCourses}
+          {totalCourses}
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          Bao gồm cả khóa đang duyệt.
+          Admin tạo và gán cho bạn.
         </p>
       </div>
       <div className="rounded-xl bg-white shadow-sm border border-slate-100 p-4">
         <p className="text-xs font-medium text-slate-500">Học viên đang học</p>
-        <p className="mt-2 text-2xl font-semibold text-slate-900">
-          {mockSummary.activeStudents}
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          Tổng số học viên trên tất cả khóa.
-        </p>
+        <p className="mt-2 text-2xl font-semibold text-slate-900">{stats.activeStudents ?? 0}</p>
+        <p className="mt-1 text-xs text-slate-500">Tổng số học viên trên tất cả khóa</p>
       </div>
       <div className="rounded-xl bg-slate-900 text-slate-50 shadow-sm border border-slate-900/40 p-4">
-        <p className="text-xs font-medium text-slate-300">
-          Doanh thu tháng này (demo)
-        </p>
+        <p className="text-xs font-medium text-slate-300">Doanh thu</p>
         <p className="mt-2 text-2xl font-semibold">
-          {mockSummary.monthlyRevenue}
+          {Number(stats.totalRevenue ?? 0).toLocaleString("vi-VN")}đ
         </p>
-        <p className="mt-1 text-xs text-slate-300">
-          Số liệu minh họa – sẽ lấy từ bảng `payments`.
-        </p>
+        <p className="mt-1 text-xs text-slate-300">Từ bảng payments</p>
       </div>
       <div className="rounded-xl bg-white shadow-sm border border-slate-100 p-4">
-        <p className="text-xs font-medium text-slate-500">
-          Khóa học chờ admin duyệt
-        </p>
-        <p className="mt-2 text-2xl font-semibold text-slate-900">
-          {mockSummary.pendingApproval}
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          Bạn có thể chỉnh sửa nội dung trước khi được duyệt.
-        </p>
+        <p className="text-xs font-medium text-slate-500">Khóa DRAFT</p>
+        <p className="mt-2 text-2xl font-semibold text-slate-900">{stats.draftCourses ?? 0}</p>
+        <p className="mt-1 text-xs text-slate-500">Khóa chờ admin duyệt</p>
       </div>
     </div>
   );
 }
 
-function CoursesSection() {
+function CoursesSection({ courses = [], loading, onCourseClick }) {
+  const statusLabel = (s) => ({ PUBLISHED: "Đang bán", DRAFT: "Chờ duyệt", ARCHIVED: "Ẩn" }[s] || s || "—");
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">
-          Khóa học của tôi
+          Khóa học được gán (Admin tạo và gán cho bạn)
         </h2>
-        <button className="inline-flex items-center rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800">
-          + Tạo khóa học mới
-        </button>
       </div>
-      <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-xs font-medium text-slate-500">
-                <th className="px-4 py-2">Tên khóa học</th>
-                <th className="px-4 py-2">Trạng thái</th>
-                <th className="px-4 py-2">Học viên</th>
-                <th className="px-4 py-2">Rating</th>
-                <th className="px-4 py-2">Giá</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {mockTeacherCourses.map((course) => (
-                <tr key={course.id} className="hover:bg-slate-50/70">
-                  <td className="px-4 py-2 text-slate-900">{course.title}</td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                        course.status === "Đang bán"
-                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
-                          : "bg-sky-50 text-sky-700 ring-1 ring-sky-100"
-                      }`}
-                    >
-                      {course.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-slate-600">
-                    {course.students}
-                  </td>
-                  <td className="px-4 py-2 text-slate-600">
-                    {course.rating ? `${course.rating.toFixed(1)}★` : "-"}
-                  </td>
-                  <td className="px-4 py-2 text-slate-900 font-medium">
-                    {course.price}
-                  </td>
+      {loading ? (
+        <div className="rounded-xl bg-white border p-6 text-center text-slate-500">Đang tải...</div>
+      ) : (
+        <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-left text-xs font-medium text-slate-500">
+                  <th className="px-4 py-2">Tên khóa học</th>
+                  <th className="px-4 py-2">Trạng thái</th>
+                  <th className="px-4 py-2">Giá</th>
+                  <th className="px-4 py-2">Thao tác</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {courses.length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">Chưa có khóa học nào được gán</td></tr>
+                ) : (
+                  courses.map((course) => (
+                    <tr key={course.id} className="hover:bg-slate-50/70">
+                      <td className="px-4 py-2 text-slate-900">{course.title}</td>
+                      <td className="px-4 py-2">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            course.status === "PUBLISHED"
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
+                              : "bg-sky-50 text-sky-700 ring-1 ring-sky-100"
+                          }`}
+                        >
+                          {statusLabel(course.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-slate-600">
+                        {Number(course.price || 0).toLocaleString("vi-VN")}đ
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          type="button"
+                          onClick={() => onCourseClick(course.id)}
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                        >
+                          Quản lý nội dung →
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function LecturesSection() {
+function LecturesSection({ lectures = [], loading, onCourseClick }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">
-          Bài giảng / Nội dung khóa học
-        </h2>
-        <button className="inline-flex items-center rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800">
-          + Thêm bài giảng mới
-        </button>
-      </div>
+      <h2 className="text-lg font-semibold text-slate-900">Bài giảng / Nội dung khóa học</h2>
+      <p className="text-xs text-slate-500">Vào từng khóa học để thêm/sửa bài giảng.</p>
       <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -246,14 +127,26 @@ function LecturesSection() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {mockLectures.map((lec) => (
-                <tr key={lec.id} className="hover:bg-slate-50/70">
-                  <td className="px-4 py-2 text-slate-900">{lec.course}</td>
-                  <td className="px-4 py-2 text-slate-600">{lec.title}</td>
-                  <td className="px-4 py-2 text-slate-600">{lec.order}</td>
-                  <td className="px-4 py-2 text-slate-600">{lec.duration}</td>
-                </tr>
-              ))}
+              {loading ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">Đang tải...</td></tr>
+              ) : lectures.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">Chưa có bài giảng</td></tr>
+              ) : (
+                lectures.map((lec) => (
+                  <tr key={lec.id} className="hover:bg-slate-50/70">
+                    <td className="px-4 py-2 text-slate-900">
+                      {onCourseClick ? (
+                        <button type="button" onClick={() => onCourseClick(lec.course_id)} className="text-blue-600 hover:underline">
+                          {lec.course_title}
+                        </button>
+                      ) : lec.course_title}
+                    </td>
+                    <td className="px-4 py-2 text-slate-600">{lec.title}</td>
+                    <td className="px-4 py-2 text-slate-600">{lec.order_index}</td>
+                    <td className="px-4 py-2 text-slate-600">{lec.duration_minutes ?? 0} phút</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -262,47 +155,43 @@ function LecturesSection() {
   );
 }
 
-function StudentsSection() {
+function StudentsSection({ students = [], loading }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">
-          Học viên của tôi
-        </h2>
-        <span className="text-xs text-slate-500">
-          Data mẫu – sau này sẽ lấy từ bảng `enrollments`.
-        </span>
-      </div>
+      <h2 className="text-lg font-semibold text-slate-900">Học viên của tôi</h2>
       <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-medium text-slate-500">
                 <th className="px-4 py-2">Họ tên</th>
+                <th className="px-4 py-2">Email</th>
                 <th className="px-4 py-2">Khóa học</th>
                 <th className="px-4 py-2">Tiến độ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {mockStudents.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50/70">
-                  <td className="px-4 py-2 text-slate-900">{s.name}</td>
-                  <td className="px-4 py-2 text-slate-600">{s.course}</td>
-                  <td className="px-4 py-2">
-                    <div className="w-40">
-                      <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-emerald-500"
-                          style={{ width: `${s.progress}%` }}
-                        />
+              {loading ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">Đang tải...</td></tr>
+              ) : students.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">Chưa có học viên</td></tr>
+              ) : (
+                students.map((s) => (
+                  <tr key={s.id} className="hover:bg-slate-50/70">
+                    <td className="px-4 py-2 text-slate-900">{s.student_name || "—"}</td>
+                    <td className="px-4 py-2 text-slate-600">{s.student_email}</td>
+                    <td className="px-4 py-2 text-slate-600">{s.course_title}</td>
+                    <td className="px-4 py-2">
+                      <div className="w-32">
+                        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${s.progress_percent ?? 0}%` }} />
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-500">{s.progress_percent ?? 0}% hoàn thành</p>
                       </div>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        {s.progress}% hoàn thành
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -311,78 +200,25 @@ function StudentsSection() {
   );
 }
 
-function RevenueSection() {
+function RevenueSection({ stats = {} }) {
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-slate-900">
-        Doanh thu &amp; rút tiền (demo)
-      </h2>
-      <div className="grid gap-4 md:grid-cols-3">
+      <h2 className="text-lg font-semibold text-slate-900">Doanh thu</h2>
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl bg-white shadow-sm border border-slate-100 p-4">
-          <p className="text-xs font-medium text-slate-500">
-            Số dư khả dụng để rút
-          </p>
+          <p className="text-xs font-medium text-slate-500">Tổng doanh thu</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">
-            {mockRevenue.availableToWithdraw}
+            {Number(stats.totalRevenue ?? 0).toLocaleString("vi-VN")}đ
           </p>
-          <button className="mt-3 inline-flex items-center rounded-lg bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-800">
-            Yêu cầu rút tiền
-          </button>
-        </div>
-        <div className="rounded-xl bg-white shadow-sm border border-slate-100 p-4">
-          <p className="text-xs font-medium text-slate-500">
-            Doanh thu tháng này
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
-            {mockRevenue.totalThisMonth}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Số liệu demo, sẽ tính từ bảng payments.
-          </p>
+          <p className="mt-1 text-xs text-slate-500">Từ bảng payments</p>
         </div>
         <div className="rounded-xl bg-slate-900 text-slate-50 shadow-sm border border-slate-900/40 p-4">
-          <p className="text-xs font-medium text-slate-300">Lần rút gần nhất</p>
-          <p className="mt-2 text-sm font-semibold">
-            {mockRevenue.lastPayout}
-          </p>
-          <p className="mt-1 text-xs text-slate-300">
-            Thông tin minh họa để hoàn thiện UI.
-          </p>
+          <p className="text-xs font-medium text-slate-300">Học viên đang học</p>
+          <p className="mt-2 text-2xl font-semibold">{stats.activeStudents ?? 0}</p>
+          <p className="mt-1 text-xs text-slate-300">Tổng trên tất cả khóa</p>
         </div>
       </div>
-
-      <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-          <h3 className="text-sm font-semibold text-slate-900">
-            Lịch sử yêu cầu rút tiền
-          </h3>
-          <span className="text-xs text-slate-500">Data mẫu (static)</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-xs font-medium text-slate-500">
-                <th className="px-4 py-2">Ngày</th>
-                <th className="px-4 py-2">Số tiền</th>
-                <th className="px-4 py-2">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {mockPayouts.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/70">
-                  <td className="px-4 py-2 text-slate-900">{p.date}</td>
-                  <td className="px-4 py-2 text-slate-600">{p.amount}</td>
-                  <td className="px-4 py-2">
-                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-100">
-                      {p.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <p className="text-xs text-slate-500">API lịch sử rút tiền đang phát triển.</p>
     </div>
   );
 }
@@ -394,33 +230,13 @@ function ProfileSection({ user }) {
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <p className="text-xs text-slate-500">Họ tên</p>
-          <p className="text-sm font-medium text-slate-900">
-            {user?.full_name || "Teacher User"}
-          </p>
+          <p className="text-sm font-medium text-slate-900">{user?.full_name || user?.fullName || "—"}</p>
         </div>
         <div>
           <p className="text-xs text-slate-500">Email</p>
-          <p className="text-sm font-medium text-slate-900">
-            {user?.email || "teacher@example.com"}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Kinh nghiệm</p>
-          <p className="text-sm font-medium text-slate-900">
-            3+ năm dạy tiếng Anh giao tiếp (demo)
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Chứng chỉ</p>
-          <p className="text-sm font-medium text-slate-900">
-            IELTS 8.0, TESOL (demo)
-          </p>
+          <p className="text-sm font-medium text-slate-900">{user?.email || "—"}</p>
         </div>
       </div>
-      <p className="text-xs text-slate-500">
-        Đây là dữ liệu cứng minh họa. Khi kết nối backend, bạn có thể hiển thị
-        hồ sơ thật từ bảng users/profiles.
-      </p>
     </div>
   );
 }
@@ -429,34 +245,65 @@ export default function TeacherHomePage() {
   const navigate = useNavigate();
   const user = getStoredUser();
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [assignedCourses, setAssignedCourses] = useState([]);
+  const [lectures, setLectures] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [stats, setStats] = useState({});
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [loadingLectures, setLoadingLectures] = useState(true);
+  const [loadingStudents, setLoadingStudents] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    api.get("/courses/teacher/assigned")
+      .then(res => setAssignedCourses(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setAssignedCourses([]))
+      .finally(() => setLoadingCourses(false));
+    api.get("/lectures/teacher/all")
+      .then(res => setLectures(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setLectures([]))
+      .finally(() => setLoadingLectures(false));
+    api.get("/enrollments/teacher/students")
+      .then(res => setStudents(res.data?.data || []))
+      .catch(() => setStudents([]))
+      .finally(() => setLoadingStudents(false));
+    api.get("/stats/teacher")
+      .then(res => setStats(res.data || {}))
+      .catch(() => setStats({}))
+      .finally(() => setLoadingStats(false));
+  }, []);
+
+  const handleCourseClick = (courseId) => {
+    navigate(`/teacher/course/${courseId}`);
+  };
 
   const renderContent = () => {
     if (activeSection === "dashboard") {
       return (
         <div className="space-y-6">
-          <SummaryCards />
+          <SummaryCards totalCourses={assignedCourses.length} stats={stats} />
           <div className="grid gap-6 lg:grid-cols-2">
-            <CoursesSection />
-            <StudentsSection />
+            <CoursesSection courses={assignedCourses} loading={loadingCourses} onCourseClick={handleCourseClick} />
+            <StudentsSection students={students} loading={loadingStudents} />
           </div>
         </div>
       );
     }
 
     if (activeSection === "myCourses") {
-      return <CoursesSection />;
+      return <CoursesSection courses={assignedCourses} loading={loadingCourses} onCourseClick={handleCourseClick} />;
     }
 
     if (activeSection === "lectures") {
-      return <LecturesSection />;
+      return <LecturesSection lectures={lectures} loading={loadingLectures} onCourseClick={handleCourseClick} />;
     }
 
     if (activeSection === "students") {
-      return <StudentsSection />;
+      return <StudentsSection students={students} loading={loadingStudents} />;
     }
 
     if (activeSection === "revenue") {
-      return <RevenueSection />;
+      return <RevenueSection stats={stats} />;
     }
 
     if (activeSection === "profile") {

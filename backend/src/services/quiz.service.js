@@ -107,6 +107,14 @@ module.exports = {
     const courseId = payload.course_id ?? null;
     const description = payload.description ?? null;
 
+    if (courseId) {
+      const c = await pool.request()
+        .input("course_id", sql.UniqueIdentifier, courseId)
+        .input("teacher_id", sql.UniqueIdentifier, teacherId)
+        .query(`SELECT id FROM courses WHERE id = @course_id AND teacher_id = @teacher_id AND (status IS NULL OR status <> 'DELETED')`);
+      if (c.recordset.length === 0) throw new Error("Khóa học không tồn tại hoặc không được gán cho giáo viên này");
+    }
+
     const rs = await pool
       .request()
       .input("teacher_id", sql.UniqueIdentifier, teacherId)

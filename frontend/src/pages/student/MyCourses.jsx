@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import api from "../api/axios";
+import api from "../../api/axios";
 
-function Courses() {
+const MyCourses = () => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -21,23 +21,24 @@ function Courses() {
 
   return (
     <div className="p-6">
-      <h2 className="text-3xl font-bold mb-4">Danh sách khóa học</h2>
-      <div className="space-y-4">
-        {courses.length === 0 ? (
-          <p className="text-gray-500">Chưa có khóa học nào.</p>
-        ) : (
-          courses.map(course => (
-            <div key={course.id} className="p-4 border rounded-lg shadow-sm">
-              <h3 className="text-xl font-semibold">{course.title}</h3>
+      <h1 className="text-3xl font-bold mb-6">Khóa học của tôi</h1>
+      <p className="text-gray-600 mb-4">Danh sách khóa học có sẵn. (API enrollment đang chờ phát triển để hiển thị khóa đã đăng ký.)</p>
+      {courses.length === 0 ? (
+        <p className="text-gray-500">Chưa có khóa học nào.</p>
+      ) : (
+        <div className="space-y-4">
+          {courses.map(course => (
+            <div key={course.id} className="p-4 bg-white rounded-lg shadow border">
+              <h3 className="font-semibold text-lg">{course.title}</h3>
               {course.description && <p className="text-gray-600 text-sm mt-1">{course.description}</p>}
-              <p className="text-gray-600 mt-2">{Number(course.price || 0).toLocaleString("vi-VN")} VND</p>
+              <p className="mt-2 text-slate-700">{Number(course.price || 0).toLocaleString("vi-VN")} VND</p>
               {course.teacher_name && <p className="text-sm text-slate-500">Giáo viên: {course.teacher_name}</p>}
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
+};
 
-export default Courses;
+export default MyCourses;

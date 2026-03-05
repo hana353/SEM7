@@ -58,6 +58,30 @@ async function getAllCourses() {
 }
 
 /**
+ * Teacher: danh sách khóa học được admin gán (teacher_id = teacherId)
+ */
+async function getCoursesByTeacherId(teacherId) {
+  await poolConnect;
+
+  const rs = await pool
+    .request()
+    .input("teacher_id", sql.UniqueIdentifier, teacherId)
+    .query(`
+      SELECT 
+        c.id, c.teacher_id, c.title, c.description, c.price, c.status, 
+        c.total_duration_minutes, c.created_at,
+        u.full_name AS teacher_name, u.email AS teacher_email
+      FROM courses c
+      LEFT JOIN users u ON u.id = c.teacher_id AND u.is_active = 1 AND u.is_deleted = 0
+      WHERE c.teacher_id = @teacher_id
+        AND (c.status IS NULL OR c.status <> 'DELETED')
+      ORDER BY c.created_at DESC
+    `);
+
+  return rs.recordset;
+}
+
+/**
  * Public: get course detail (ẩn course đã xóa: status = 'DELETED')
  * NOTE: dùng LEFT JOIN để course chưa assign teacher vẫn xem được
  */
@@ -99,10 +123,11 @@ async function createCourseByAdmin(payload, adminId) {
   } = payload;
 
   if (!title || !title.trim()) throw new Error("title là bắt buộc");
+  if (!teacher_id) throw new Error("teacher_id là bắt buộc - Admin phải gán giáo viên khi tạo khóa");
 
   await poolConnect;
 
-  if (teacher_id) await assertTeacher(teacher_id);
+  await assertTeacher(teacher_id);
 
   const createdByExists = await hasColumn("courses", "created_by");
 
@@ -273,6 +298,7 @@ async function softDeleteCourseByAdmin(courseId) {
 module.exports = {
   getAllCourses,
   getCourseById,
+  getCoursesByTeacherId,
   createCourseByAdmin,
   assignTeacherToCourse,
   updateCourseByAdmin,

@@ -1,29 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import LoginForm from "../components/LoginForm";
 import SignupForm from "../components/SignupForm";
-
-const featuredCourses = [
-  {
-    id: 1,
-    title: "IELTS Foundation 5.0+",
-    level: "Intermediate",
-    duration: "Lộ trình 12 tuần",
-  },
-  {
-    id: 2,
-    title: "Giao tiếp tiếng Anh cho người đi làm",
-    level: "Beginner - Intermediate",
-    duration: "Tối 2-4-6 / 3-5-7",
-  },
-  {
-    id: 3,
-    title: "Khóa phát âm & ngữ điệu chuẩn",
-    level: "All levels",
-    duration: "8 tuần tập trung",
-  },
-];
+import api from "../api/axios";
 
 export default function Home() {
+  const [featuredCourses, setFeaturedCourses] = useState([]);
+
+  useEffect(() => {
+    api.get("/courses")
+      .then(res => setFeaturedCourses(Array.isArray(res.data) ? res.data.slice(0, 6) : []))
+      .catch(() => setFeaturedCourses([]));
+  }, []);
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-sky-50 via-white to-indigo-50">
       {/* sparkles background */}
@@ -66,41 +54,46 @@ export default function Home() {
           {/* Featured courses */}
           <section className="space-y-4 rounded-3xl bg-white/80 p-6 shadow-lg ring-1 ring-white/60 backdrop-blur">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">
-                Khoá học nổi bật
-              </h2>
-              <span className="cursor-pointer text-xs font-medium text-indigo-600 hover:text-indigo-700">
+              <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">Khoá học nổi bật</h2>
+              <Link to="/courses" className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
                 Xem tất cả khoá học
-              </span>
+              </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              {featuredCourses.map((course) => (
-                <div
-                  key={course.id}
-                  className="group rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-[1px] shadow-sm ring-1 ring-indigo-100/70 transition hover:-translate-y-1 hover:shadow-md"
-                >
-                  <div className="h-full rounded-[14px] bg-white/90 p-4">
-                    <h3 className="text-sm font-semibold text-gray-900 sm:text-base">
-                      {course.title}
-                    </h3>
-                    <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                      <span className="rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700">
-                        {course.level}
+              {featuredCourses.length === 0 ? (
+                <p className="col-span-2 py-6 text-center text-sm text-gray-500">Đang tải khóa học...</p>
+              ) : (
+                featuredCourses.map((course) => (
+                  <Link
+                    key={course.id}
+                    to="/courses"
+                    className="group rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-sky-50 p-[1px] shadow-sm ring-1 ring-indigo-100/70 transition hover:-translate-y-1 hover:shadow-md"
+                  >
+                    <div className="h-full rounded-[14px] bg-white/90 p-4">
+                      <h3 className="text-sm font-semibold text-gray-900 sm:text-base">{course.title}</h3>
+                      <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                        <span className="rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700">
+                          {course.status || "PUBLISHED"}
+                        </span>
+                        <span>•</span>
+                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
+                          {Number(course.total_duration_minutes || 0)} phút
+                        </span>
+                        {course.teacher_name && (
+                          <>
+                            <span>•</span>
+                            <span>{course.teacher_name}</span>
+                          </>
+                        )}
+                      </p>
+                      <span className="mt-4 inline-flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-700">
+                        Xem chi tiết khoá học
+                        <span className="ml-1 transition-transform group-hover:translate-x-0.5">→</span>
                       </span>
-                      <span>•</span>
-                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
-                        {course.duration}
-                      </span>
-                    </p>
-                    <button className="mt-4 inline-flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-700">
-                      Xem chi tiết khoá học
-                      <span className="ml-1 transition-transform group-hover:translate-x-0.5">
-                        →
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                    </div>
+                  </Link>
+                ))
+              )}
             </div>
           </section>
         </div>

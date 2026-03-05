@@ -3,6 +3,7 @@ import Home from "../pages/Home";
 import Courses from "../pages/Courses";
 import AdminHomePage from "../pages/admin/AdminHomePage";
 import TeacherHomePage from "../pages/teacher/TeacherHomePage";
+import TeacherCourseDetail from "../pages/teacher/TeacherCourseDetail";
 import StudentHomePage from "../pages/student/StudentHomePage";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getRoleCode } from "../auth/session";
@@ -29,6 +30,7 @@ export default function AppRouter() {
 
         <Route element={<ProtectedRoute allowRoles={[ROLE.TEACHER]} />}>
           <Route path="/teacher" element={<TeacherHomePage />} />
+          <Route path="/teacher/course/:courseId" element={<TeacherCourseDetail />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
