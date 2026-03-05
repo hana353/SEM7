@@ -11,6 +11,7 @@ const lectureRoutes = require("./routes/lecture.routes");
 const vocabularyRoutes = require("./routes/vocabulary.routes");
 const enrollmentRoutes = require("./routes/enrollment.routes");
 const statsRoutes = require("./routes/stats.routes");
+const paymentRoutes = require("./routes/payment.routes");
 const { ensureSchema } = require("./config/db");
 
 const app = express();
@@ -26,6 +27,7 @@ app.use("/api/lectures", lectureRoutes);
 app.use("/api/vocabulary", vocabularyRoutes);
 app.use("/api/enrollments", enrollmentRoutes);
 app.use("/api/stats", statsRoutes);
+app.use("/api/payments", paymentRoutes);
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
