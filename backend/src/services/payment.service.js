@@ -7,7 +7,7 @@ const {
   signParams,
   verifySecureHash,
   parseVnpPayDate,
-  buildQueryString,
+  buildVnpString, // ✅ dùng cái này thay buildQueryString
 } = require("../config/vnpay");
 
 function getClientIp(req) {
@@ -38,8 +38,6 @@ async function isEnrolled(studentId, courseId) {
 }
 
 async function createEnrollmentIfNotExists(trxRequest, studentId, courseId) {
-  // trxRequest: request object bound to transaction (transaction.request())
-  // Create enrollment if not exists, return enrollmentId
   const exist = await trxRequest
     .input("student_id", sql.UniqueIdentifier, studentId)
     .input("course_id", sql.UniqueIdentifier, courseId)
@@ -66,18 +64,18 @@ async function createEnrollmentIfNotExists(trxRequest, studentId, courseId) {
  */
 async function createCoursePaymentUrl({ studentId, courseId, req }) {
   if (!vnpayConfig.tmnCode || !vnpayConfig.hashSecret || !vnpayConfig.returnUrl) {
-    throw new Error("Thiếu cấu hình VNPay (VNPAY_TMN_CODE / VNPAY_HASH_SECRET / VNPAY_RETURN_URL)");
+    throw new Error(
+      "Thiếu cấu hình VNPay (VNPAY_TMN_CODE / VNPAY_HASH_SECRET / VNPAY_RETURN_URL)"
+    );
   }
 
   const course = await getCourseById(courseId);
   if (!course) throw new Error("course_id không tồn tại hoặc đã bị xóa");
 
-  // Only allow buying published courses
   if (course.status !== "PUBLISHED") {
     throw new Error("Khóa học chưa được PUBLISHED nên không thể thanh toán");
   }
 
-  // Already owned?
   if (await isEnrolled(studentId, courseId)) {
     throw new Error("Bạn đã sở hữu/đăng ký khóa học này rồi");
   }
@@ -88,7 +86,6 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
   // Free course => enroll directly
   if (price === 0) {
     await poolConnect;
-    // create enrollment (no payment)
     const t = new sql.Transaction(pool);
     await t.begin();
     try {
@@ -108,7 +105,9 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
   // Create payment record PENDING
   await poolConnect;
   const txnRef = generateTxnRef();
-  const orderInfo = `Thanh toan khoa hoc: ${course.title}`;
+
+  // VNPay hay bị "Sai chữ ký" nếu OrderInfo có ký tự đặc biệt -> keep simple
+  const orderInfo = `Thanh toan khoa hoc ${course.title}`;
 
   const insert = await pool
     .request()
@@ -131,9 +130,11 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
   // Build VNPay URL
   const now = new Date();
   const createDate = formatVnpDate(now);
-  const expireDate = formatVnpDate(new Date(now.getTime() + vnpayConfig.expireMinutes * 60 * 1000));
+  const expireDate = formatVnpDate(
+    new Date(now.getTime() + vnpayConfig.expireMinutes * 60 * 1000)
+  );
 
-  // VNPay amount in VND * 100, integer
+  // VNPay amount in VND * 100 (integer)
   const vnpAmount = Math.round(price * 100);
 
   const ipAddr = getClientIp(req);
@@ -154,8 +155,15 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
     vnp_ExpireDate: expireDate,
   };
 
+  // ✅ ký đúng chuẩn VNPay
   const secureHash = signParams(vnpParams, vnpayConfig.hashSecret);
-  const queryString = buildQueryString({ ...vnpParams, vnp_SecureHash: secureHash });
+
+  // ✅ build querystring đúng chuẩn VNPay
+  const queryString = buildVnpString({
+    ...vnpParams,
+    vnp_SecureHash: secureHash,
+  });
+
   const paymentUrl = `${vnpayConfig.vnpUrl}?${queryString}`;
 
   return {
@@ -172,9 +180,6 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
 
 /**
  * Handle VNPay return (user redirect) or IPN
- * - Verify secure hash
- * - Update payment status
- * - If success: create enrollment and link enrollment_id
  */
 async function handleVnpayCallback(vnpParams) {
   if (!verifySecureHash(vnpParams, vnpayConfig.hashSecret)) {
@@ -198,7 +203,6 @@ async function handleVnpayCallback(vnpParams) {
   const payment = paymentRs.recordset[0];
   if (!payment) return { ok: false, message: "Không tìm thấy payment theo txn_ref" };
 
-  // Amount check: VNPay sends vnp_Amount = amount*100
   const vnpAmount = Number(vnpParams.vnp_Amount);
   const expected = Math.round(Number(payment.amount) * 100);
 
@@ -206,12 +210,10 @@ async function handleVnpayCallback(vnpParams) {
     return { ok: false, message: "Sai số tiền thanh toán" };
   }
 
-  // Determine success
-  const responseCode = vnpParams.vnp_ResponseCode; // '00' success
-  const transactionStatus = vnpParams.vnp_TransactionStatus; // '00' success
+  const responseCode = vnpParams.vnp_ResponseCode;
+  const transactionStatus = vnpParams.vnp_TransactionStatus;
   const isSuccess = responseCode === "00" && transactionStatus === "00";
 
-  // If already SUCCESS, return idempotent
   if (payment.status === "SUCCESS") {
     return {
       ok: true,
@@ -225,7 +227,6 @@ async function handleVnpayCallback(vnpParams) {
     };
   }
 
-  // Update in transaction to avoid race
   const t = new sql.Transaction(pool);
   await t.begin();
   try {
@@ -234,13 +235,8 @@ async function handleVnpayCallback(vnpParams) {
     const payDate = parseVnpPayDate(vnpParams.vnp_PayDate);
     const gatewayResponse = JSON.stringify(vnpParams);
 
-    const newStatus = isSuccess
-      ? "SUCCESS"
-      : responseCode === "24"
-        ? "CANCELLED"
-        : "FAILED";
+    const newStatus = isSuccess ? "SUCCESS" : responseCode === "24" ? "CANCELLED" : "FAILED";
 
-    // Update payment
     await r
       .input("id", sql.UniqueIdentifier, payment.id)
       .input("status", sql.NVarChar(20), newStatus)
@@ -271,14 +267,8 @@ async function handleVnpayCallback(vnpParams) {
     let enrollmentId = payment.enrollment_id;
 
     if (isSuccess) {
-      // Create enrollment if not exists
-      enrollmentId = await createEnrollmentIfNotExists(
-        r,
-        payment.student_id,
-        payment.course_id
-      );
+      enrollmentId = await createEnrollmentIfNotExists(r, payment.student_id, payment.course_id);
 
-      // Link enrollment_id to payment
       await r
         .input("pid", sql.UniqueIdentifier, payment.id)
         .input("enrollment_id", sql.UniqueIdentifier, enrollmentId)

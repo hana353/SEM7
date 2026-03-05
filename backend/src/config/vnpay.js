@@ -1,14 +1,13 @@
 // src/config/vnpay.js
 const crypto = require("crypto");
 
-/**
- * VNPay config from env
- */
 const vnpayConfig = {
   tmnCode: process.env.VNPAY_TMN_CODE,
   hashSecret: process.env.VNPAY_HASH_SECRET,
-  vnpUrl: process.env.VNPAY_URL || "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
-  returnUrl: process.env.VNPAY_RETURN_URL, // backend return endpoint
+  vnpUrl:
+    process.env.VNPAY_URL ||
+    "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
+  returnUrl: process.env.VNPAY_RETURN_URL,
   locale: process.env.VNPAY_LOCALE || "vn",
   currCode: "VND",
   version: process.env.VNPAY_VERSION || "2.1.0",
@@ -21,7 +20,6 @@ function pad2(n) {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
-// VNPay uses format yyyyMMddHHmmss
 function formatVnpDate(date) {
   const yyyy = date.getFullYear();
   const MM = pad2(date.getMonth() + 1);
@@ -33,19 +31,30 @@ function formatVnpDate(date) {
 }
 
 /**
- * Sort keys and build querystring with encodeURIComponent
- * (VNPay expects percent-encoding)
+ * VNPay-style encode: encodeURIComponent + replace %20 => +
  */
-function buildQueryString(params) {
+function vnpEncode(str) {
+  return encodeURIComponent(str).replace(/%20/g, "+");
+}
+
+/**
+ * Sort params by key asc, and build:
+ *  - signData: key=value&key=value (already VNPay-encoded)
+ *  - queryString: same as signData (VNPay accepts)
+ */
+function buildVnpString(params) {
   const keys = Object.keys(params).sort();
   return keys
-    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(params[k]))}`)
+    .map((k) => `${vnpEncode(k)}=${vnpEncode(String(params[k]))}`)
     .join("&");
 }
 
 function signParams(params, hashSecret) {
-  const qs = buildQueryString(params);
-  return crypto.createHmac("sha512", hashSecret).update(qs, "utf-8").digest("hex");
+  const signData = buildVnpString(params);
+  return crypto
+    .createHmac("sha512", hashSecret)
+    .update(signData, "utf-8")
+    .digest("hex");
 }
 
 function verifySecureHash(vnpParams, hashSecret) {
@@ -61,8 +70,8 @@ function verifySecureHash(vnpParams, hashSecret) {
 }
 
 function parseVnpPayDate(vnpPayDate) {
-  // yyyyMMddHHmmss
-  if (!vnpPayDate || typeof vnpPayDate !== "string" || vnpPayDate.length !== 14) return null;
+  if (!vnpPayDate || typeof vnpPayDate !== "string" || vnpPayDate.length !== 14)
+    return null;
   const yyyy = Number(vnpPayDate.slice(0, 4));
   const MM = Number(vnpPayDate.slice(4, 6));
   const dd = Number(vnpPayDate.slice(6, 8));
@@ -70,16 +79,14 @@ function parseVnpPayDate(vnpPayDate) {
   const mm = Number(vnpPayDate.slice(10, 12));
   const ss = Number(vnpPayDate.slice(12, 14));
   if ([yyyy, MM, dd, HH, mm, ss].some((x) => Number.isNaN(x))) return null;
-
-  // interpret as local time
   return new Date(yyyy, MM - 1, dd, HH, mm, ss);
 }
 
 module.exports = {
   vnpayConfig,
   formatVnpDate,
-  buildQueryString,
   signParams,
   verifySecureHash,
   parseVnpPayDate,
+  buildVnpString, // <- dùng để build querystring
 };
