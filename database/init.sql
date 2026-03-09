@@ -1,387 +1,450 @@
-USE master;
+USE master
 GO
 
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'SEM7')
 BEGIN
-    ALTER DATABASE [SEM7] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE [SEM7];
+ALTER DATABASE SEM7 SET SINGLE_USER WITH ROLLBACK IMMEDIATE
+DROP DATABASE SEM7
 END
 GO
 
-CREATE DATABASE [SEM7]
-COLLATE SQL_Latin1_General_CP1254_CI_AS;
+CREATE DATABASE SEM7
 GO
 
-USE [SEM7];
-GO
-
-/* =========================================================
-   ROLES
-========================================================= */
-CREATE TABLE roles (
-    id SMALLINT PRIMARY KEY,
-    code NVARCHAR(30) UNIQUE NOT NULL,
-    description NVARCHAR(255)
-);
+USE SEM7
 GO
 
 /* =========================================================
-   USERS (ADD is_verified for OTP flow)
+ROLES
 ========================================================= */
-CREATE TABLE users (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    email NVARCHAR(255) NOT NULL UNIQUE,
-    password_hash NVARCHAR(255) NOT NULL,
-    full_name NVARCHAR(255) NOT NULL,
-    phone NVARCHAR(20),
-    role_id SMALLINT NOT NULL REFERENCES roles(id),
 
-    is_verified BIT NOT NULL CONSTRAINT DF_users_is_verified DEFAULT 0,
-    is_active   BIT NOT NULL CONSTRAINT DF_users_is_active   DEFAULT 1,
-    is_deleted  BIT NOT NULL CONSTRAINT DF_users_is_deleted  DEFAULT 0,
+CREATE TABLE roles(
+id SMALLINT PRIMARY KEY,
+code NVARCHAR(30) UNIQUE NOT NULL,
+description NVARCHAR(255)
+)
 
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_users_created_at DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_users_updated_at DEFAULT SYSDATETIMEOFFSET()
-);
-GO
+INSERT INTO roles VALUES
+(1,'ADMIN','System admin'),
+(2,'TEACHER','Course creator'),
+(3,'STUDENT','Learner'),
+(4,'GUEST','Guest')
 
 /* =========================================================
-   OTP CODES
+USERS
 ========================================================= */
-CREATE TABLE otp_codes (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    email NVARCHAR(255) NOT NULL,
-    code NVARCHAR(10) NOT NULL,
-    type NVARCHAR(20) NOT NULL,              -- 'register' | 'login' | 'reset'
-    expires_at DATETIME2 NOT NULL,
-    used_at DATETIME2 NULL,
-    created_at DATETIME2 NOT NULL CONSTRAINT DF_otp_codes_created_at DEFAULT SYSUTCDATETIME()
-);
-GO
 
-CREATE INDEX IX_otp_codes_email_type_created
-ON otp_codes(email, type, created_at DESC);
-GO
+CREATE TABLE users(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+email NVARCHAR(255) UNIQUE NOT NULL,
+password_hash NVARCHAR(255) NOT NULL,
+full_name NVARCHAR(255) NOT NULL,
+phone NVARCHAR(20),
+
+role_id SMALLINT REFERENCES roles(id),
+
+is_verified BIT DEFAULT 0,
+is_active BIT DEFAULT 1,
+is_deleted BIT DEFAULT 0,
+
+created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET(),
+updated_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+)
+
+INSERT INTO users(email,password_hash,full_name,role_id,is_verified) VALUES
+('admin@gmail.com','$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG','System Admin',1,1),
+('teacher1@gmail.com','$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG','John Smith',2,1),
+('teacher2@gmail.com','$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG','Emma Brown',2,1),
+('student1@gmail.com','$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG','Nguyen Van A',3,1),
+('student2@gmail.com','$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG','Tran Thi B',3,1),
+('student3@gmail.com','$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG','Le Van C',3,1)
 
 /* =========================================================
-   COURSES
+COURSES
 ========================================================= */
-CREATE TABLE courses (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    teacher_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    title NVARCHAR(255) NOT NULL,
-    description NVARCHAR(MAX),
-    price DECIMAL(12,2) NOT NULL CONSTRAINT DF_courses_price DEFAULT 0,
-    status NVARCHAR(20) NOT NULL CONSTRAINT DF_courses_status DEFAULT 'PUBLISHED',
-    total_duration_minutes INT NOT NULL CONSTRAINT DF_courses_total_duration DEFAULT 0,
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_courses_created_at DEFAULT SYSDATETIMEOFFSET()
-);
-GO
 
-/* creator tracking (as you had) */
-ALTER TABLE courses ADD created_by UNIQUEIDENTIFIER NULL;
-ALTER TABLE courses ADD CONSTRAINT FK_courses_created_by
-FOREIGN KEY (created_by) REFERENCES users(id);
-GO
+CREATE TABLE courses(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+teacher_id UNIQUEIDENTIFIER REFERENCES users(id),
+
+title NVARCHAR(255),
+description NVARCHAR(MAX),
+price DECIMAL(10,2),
+
+total_duration_minutes INT,
+status NVARCHAR(20) DEFAULT 'PUBLISHED',
+
+created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+)
+
+INSERT INTO courses(teacher_id,title,description,price,total_duration_minutes)
+SELECT id,'English for Beginners','Basic communication course',0,120
+FROM users WHERE email='teacher1@gmail.com'
+
+INSERT INTO courses(teacher_id,title,description,price,total_duration_minutes)
+SELECT id,'IELTS Speaking Mastery','Improve speaking band score',199000,180
+FROM users WHERE email='teacher2@gmail.com'
+
+INSERT INTO courses(teacher_id,title,description,price,total_duration_minutes)
+SELECT id,'Daily English Conversation','Learn real life conversation',99000,150
+FROM users WHERE email='teacher1@gmail.com'
 
 /* =========================================================
-   LECTURES
+LECTURES
 ========================================================= */
-CREATE TABLE lectures (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    course_id UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    title NVARCHAR(255) NOT NULL,
-    video_url NVARCHAR(500),
-    duration_minutes INT NOT NULL CONSTRAINT DF_lectures_duration DEFAULT 0,
-    order_index INT NOT NULL
-);
-GO
+
+CREATE TABLE lectures(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+course_id UNIQUEIDENTIFIER REFERENCES courses(id) ON DELETE CASCADE,
+title NVARCHAR(255),
+video_url NVARCHAR(500),
+duration_minutes INT,
+order_index INT
+)
+
+INSERT INTO lectures(course_id,title,video_url,duration_minutes,order_index)
+SELECT id,'Alphabet','youtube.com/video1',10,1
+FROM courses WHERE title='English for Beginners'
+
+INSERT INTO lectures(course_id,title,video_url,duration_minutes,order_index)
+SELECT id,'Basic Greetings','youtube.com/video2',12,2
+FROM courses WHERE title='English for Beginners'
+
+INSERT INTO lectures(course_id,title,video_url,duration_minutes,order_index)
+SELECT id,'Introduce Yourself','youtube.com/video3',15,3
+FROM courses WHERE title='English for Beginners'
 
 /* =========================================================
-   ENROLLMENTS
+ENROLLMENTS
 ========================================================= */
-CREATE TABLE enrollments (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    student_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    course_id UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id),
-    progress_percent DECIMAL(5,2) NOT NULL CONSTRAINT DF_enrollments_progress DEFAULT 0,
-    enrolled_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_enrollments_enrolled_at DEFAULT SYSDATETIMEOFFSET(),
-    UNIQUE(student_id, course_id)
-);
-GO
+
+CREATE TABLE enrollments(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+student_id UNIQUEIDENTIFIER REFERENCES users(id),
+course_id UNIQUEIDENTIFIER REFERENCES courses(id),
+progress_percent DECIMAL(5,2) DEFAULT 0,
+enrolled_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+)
+
+INSERT INTO enrollments(student_id,course_id)
+SELECT u.id,c.id
+FROM users u,courses c
+WHERE u.email='student1@gmail.com'
+AND c.title='English for Beginners'
+
+INSERT INTO enrollments(student_id,course_id)
+SELECT u.id,c.id
+FROM users u,courses c
+WHERE u.email='student2@gmail.com'
+AND c.title='English for Beginners'
 
 /* =========================================================
-   FLASHCARD QUIZZES (NEW)
+QUIZ
 ========================================================= */
-CREATE TABLE quiz_sets (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    teacher_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    course_id UNIQUEIDENTIFIER NULL REFERENCES courses(id),
 
-    title NVARCHAR(255) NOT NULL,
-    description NVARCHAR(MAX) NULL,
+CREATE TABLE quiz_sets(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+teacher_id UNIQUEIDENTIFIER REFERENCES users(id),
+course_id UNIQUEIDENTIFIER REFERENCES courses(id),
+title NVARCHAR(255),
+status NVARCHAR(20)
+)
 
-    status NVARCHAR(20) NOT NULL CONSTRAINT DF_quiz_sets_status DEFAULT 'DRAFT', -- DRAFT|PUBLISHED|ARCHIVED
-    is_deleted BIT NOT NULL CONSTRAINT DF_quiz_sets_is_deleted DEFAULT 0,
+INSERT INTO quiz_sets(teacher_id,course_id,title,status)
+SELECT u.id,c.id,'Basic Vocabulary','PUBLISHED'
+FROM users u,courses c
+WHERE u.email='teacher1@gmail.com'
+AND c.title='English for Beginners'
 
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_sets_created_at DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_sets_updated_at DEFAULT SYSDATETIMEOFFSET()
-);
-GO
+CREATE TABLE quiz_cards(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+quiz_set_id UNIQUEIDENTIFIER REFERENCES quiz_sets(id),
+front_text NVARCHAR(MAX),
+back_text NVARCHAR(MAX),
+position INT
+)
 
-CREATE INDEX IX_quiz_sets_course_status
-ON quiz_sets(course_id, status)
-WHERE is_deleted = 0;
-GO
+INSERT INTO quiz_cards(quiz_set_id,front_text,back_text,position)
+SELECT id,'Hello','Xin chào',1
+FROM quiz_sets WHERE title='Basic Vocabulary'
 
-CREATE TABLE quiz_cards (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    quiz_set_id UNIQUEIDENTIFIER NOT NULL REFERENCES quiz_sets(id) ON DELETE CASCADE,
-
-    front_text NVARCHAR(MAX) NOT NULL,
-    back_text  NVARCHAR(MAX) NOT NULL,
-    front_image_url NVARCHAR(500) NULL,
-    back_image_url  NVARCHAR(500) NULL,
-
-    position INT NOT NULL CONSTRAINT DF_quiz_cards_position DEFAULT 0,
-    is_deleted BIT NOT NULL CONSTRAINT DF_quiz_cards_is_deleted DEFAULT 0,
-
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_cards_created_at DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_cards_updated_at DEFAULT SYSDATETIMEOFFSET()
-);
-GO
-
-CREATE INDEX IX_quiz_cards_set_position
-ON quiz_cards(quiz_set_id, position)
-WHERE is_deleted = 0;
-GO
+INSERT INTO quiz_cards(quiz_set_id,front_text,back_text,position)
+SELECT id,'Thank you','Cảm ơn',2
+FROM quiz_sets WHERE title='Basic Vocabulary'
 
 /* =========================================================
-   TESTS / EXAMS (NEW)
+TEST
 ========================================================= */
-CREATE TABLE tests (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    teacher_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    course_id UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id),
 
-    title NVARCHAR(255) NOT NULL,
-    description NVARCHAR(MAX) NULL,
+CREATE TABLE tests(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+teacher_id UNIQUEIDENTIFIER REFERENCES users(id),
+course_id UNIQUEIDENTIFIER REFERENCES courses(id),
+title NVARCHAR(255),
+duration_minutes INT,
+status NVARCHAR(20)
+)
 
-    duration_minutes INT NULL,
-    max_attempts INT NULL, -- NULL = unlimited
+INSERT INTO tests(teacher_id,course_id,title,duration_minutes,status)
+SELECT u.id,c.id,'Basic English Test',15,'PUBLISHED'
+FROM users u,courses c
+WHERE u.email='teacher1@gmail.com'
+AND c.title='English for Beginners'
 
-    shuffle_questions BIT NOT NULL CONSTRAINT DF_tests_shuffle_questions DEFAULT 0,
-    shuffle_choices   BIT NOT NULL CONSTRAINT DF_tests_shuffle_choices DEFAULT 0,
+CREATE TABLE test_questions(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+test_id UNIQUEIDENTIFIER REFERENCES tests(id),
+question_text NVARCHAR(MAX),
+points INT
+)
 
-    status NVARCHAR(20) NOT NULL CONSTRAINT DF_tests_status DEFAULT 'DRAFT', -- DRAFT|PUBLISHED|CLOSED
-    open_at DATETIMEOFFSET NULL,
-    close_at DATETIMEOFFSET NULL,
+INSERT INTO test_questions(test_id,question_text,points)
+SELECT id,'What does Hello mean?',1
+FROM tests WHERE title='Basic English Test'
 
-    is_deleted BIT NOT NULL CONSTRAINT DF_tests_is_deleted DEFAULT 0,
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_tests_created_at DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_tests_updated_at DEFAULT SYSDATETIMEOFFSET()
-);
-GO
+CREATE TABLE test_choices(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+question_id UNIQUEIDENTIFIER REFERENCES test_questions(id),
+choice_text NVARCHAR(255),
+is_correct BIT
+)
 
-CREATE INDEX IX_tests_course_status
-ON tests(course_id, status)
-WHERE is_deleted = 0;
-GO
+INSERT INTO test_choices(question_id,choice_text,is_correct)
+SELECT id,'Xin chào',1
+FROM test_questions WHERE question_text='What does Hello mean?'
 
-CREATE TABLE test_questions (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    test_id UNIQUEIDENTIFIER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
-
-    question_text NVARCHAR(MAX) NOT NULL,
-    points DECIMAL(6,2) NOT NULL CONSTRAINT DF_test_questions_points DEFAULT 1,
-    position INT NOT NULL CONSTRAINT DF_test_questions_position DEFAULT 0,
-
-    is_deleted BIT NOT NULL CONSTRAINT DF_test_questions_is_deleted DEFAULT 0,
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_questions_created_at DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_questions_updated_at DEFAULT SYSDATETIMEOFFSET()
-);
-GO
-
-CREATE INDEX IX_test_questions_test_position
-ON test_questions(test_id, position)
-WHERE is_deleted = 0;
-GO
-
-CREATE TABLE test_choices (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    question_id UNIQUEIDENTIFIER NOT NULL REFERENCES test_questions(id) ON DELETE CASCADE,
-
-    choice_text NVARCHAR(MAX) NOT NULL,
-    is_correct BIT NOT NULL CONSTRAINT DF_test_choices_is_correct DEFAULT 0,
-    position INT NOT NULL CONSTRAINT DF_test_choices_position DEFAULT 0,
-
-    is_deleted BIT NOT NULL CONSTRAINT DF_test_choices_is_deleted DEFAULT 0
-);
-GO
-
-CREATE INDEX IX_test_choices_question_position
-ON test_choices(question_id, position)
-WHERE is_deleted = 0;
-GO
-
-CREATE TABLE test_attempts (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    test_id UNIQUEIDENTIFIER NOT NULL REFERENCES tests(id),
-    student_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-
-    started_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_attempts_started_at DEFAULT SYSDATETIMEOFFSET(),
-    submitted_at DATETIMEOFFSET NULL,
-
-    status NVARCHAR(20) NOT NULL CONSTRAINT DF_test_attempts_status DEFAULT 'IN_PROGRESS', -- IN_PROGRESS|SUBMITTED|GRADED
-    score DECIMAL(6,2) NULL,
-    max_score DECIMAL(6,2) NULL
-);
-GO
-
-CREATE INDEX IX_test_attempts_test_student
-ON test_attempts(test_id, student_id, started_at DESC);
-GO
-
-CREATE TABLE test_attempt_answers (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    attempt_id UNIQUEIDENTIFIER NOT NULL REFERENCES test_attempts(id) ON DELETE CASCADE,
-    question_id UNIQUEIDENTIFIER NOT NULL REFERENCES test_questions(id),
-    choice_id UNIQUEIDENTIFIER NULL REFERENCES test_choices(id),
-
-    is_correct BIT NULL,
-    points_earned DECIMAL(6,2) NULL,
-
-    CONSTRAINT UQ_attempt_question UNIQUE(attempt_id, question_id)
-);
-GO
-
-CREATE INDEX IX_attempt_answers_attempt
-ON test_attempt_answers(attempt_id);
-GO
+INSERT INTO test_choices(question_id,choice_text,is_correct)
+SELECT id,'Tạm biệt',0
+FROM test_questions WHERE question_text='What does Hello mean?'
 
 /* =========================================================
-   VOCABULARY
+VOCABULARY
 ========================================================= */
-CREATE TABLE vocabulary_topics (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    title NVARCHAR(255) NOT NULL
-);
-GO
 
-CREATE TABLE vocabularies (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    topic_id UNIQUEIDENTIFIER NOT NULL REFERENCES vocabulary_topics(id),
-    word NVARCHAR(255) NOT NULL,
-    meaning NVARCHAR(MAX),
-    example_sentence NVARCHAR(MAX)
-);
-GO
+CREATE TABLE vocabulary_topics(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+title NVARCHAR(255)
+)
+
+INSERT INTO vocabulary_topics VALUES
+(NEWID(),'Food'),
+(NEWID(),'Travel'),
+(NEWID(),'Daily Conversation')
+
+CREATE TABLE vocabularies(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+topic_id UNIQUEIDENTIFIER REFERENCES vocabulary_topics(id),
+word NVARCHAR(255),
+meaning NVARCHAR(MAX),
+example_sentence NVARCHAR(MAX)
+)
+
+INSERT INTO vocabularies(topic_id,word,meaning,example_sentence)
+SELECT id,'apple','quả táo','I eat an apple everyday'
+FROM vocabulary_topics WHERE title='Food'
+
+INSERT INTO vocabularies(topic_id,word,meaning,example_sentence)
+SELECT id,'airport','sân bay','The airport is crowded'
+FROM vocabulary_topics WHERE title='Travel'
 
 /* =========================================================
-   PRONUNCIATION PRACTICE
+PRONUNCIATION
 ========================================================= */
-CREATE TABLE pronunciation_practice (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    student_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    vocabulary_id UNIQUEIDENTIFIER NOT NULL REFERENCES vocabularies(id),
-    spoken_text NVARCHAR(MAX),
-    accuracy_percent DECIMAL(5,2),
-    practiced_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_pronunciation_practice_practiced_at DEFAULT SYSDATETIMEOFFSET()
-);
-GO
+
+CREATE TABLE pronunciation_practice(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+student_id UNIQUEIDENTIFIER REFERENCES users(id),
+vocabulary_id UNIQUEIDENTIFIER REFERENCES vocabularies(id),
+spoken_text NVARCHAR(MAX),
+accuracy_percent DECIMAL(5,2),
+practiced_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+)
 
 /* =========================================================
-   PAYMENTS (UPDATED FOR VNPAY)
-   - enrollment_id: NULL (create enrollment after success)
-   - txn_ref: unique code sent to VNPay (vnp_TxnRef)
-   - VNPay response fields for reconciliation
+PAYMENTS
 ========================================================= */
-CREATE TABLE payments (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
 
-    student_id UNIQUEIDENTIFIER NOT NULL REFERENCES users(id),
-    course_id  UNIQUEIDENTIFIER NOT NULL REFERENCES courses(id),
-
-    enrollment_id UNIQUEIDENTIFIER NULL REFERENCES enrollments(id),
-
-    payment_method NVARCHAR(30) NOT NULL CONSTRAINT DF_payments_method DEFAULT 'VNPAY',
-
-    -- internal order code -> map to vnp_TxnRef
-    txn_ref NVARCHAR(100) NOT NULL,
-
-    order_info NVARCHAR(255) NULL,
-    amount DECIMAL(12,2) NOT NULL,
-
-    -- system status
-    status NVARCHAR(20) NOT NULL CONSTRAINT DF_payments_status DEFAULT 'PENDING',
-
-    -- VNPay returned fields
-    vnp_transaction_no NVARCHAR(50)  NULL,  -- vnp_TransactionNo
-    bank_code          NVARCHAR(50)  NULL,  -- vnp_BankCode
-    bank_tran_no       NVARCHAR(100) NULL,  -- vnp_BankTranNo
-    card_type          NVARCHAR(50)  NULL,  -- vnp_CardType
-    response_code      NVARCHAR(10)  NULL,  -- vnp_ResponseCode
-    transaction_status NVARCHAR(10)  NULL,  -- vnp_TransactionStatus
-    pay_date           DATETIMEOFFSET NULL, -- parsed from vnp_PayDate (yyyyMMddHHmmss)
-
-    -- raw gateway payload (return/ipn) for debugging
-    gateway_response NVARCHAR(MAX) NULL,
-
-    created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_payments_created_at DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_payments_updated_at DEFAULT SYSDATETIMEOFFSET(),
-
-    CONSTRAINT UQ_payments_txn_ref UNIQUE (txn_ref),
-
-    CONSTRAINT CHK_payments_status CHECK (
-        status IN ('PENDING','SUCCESS','FAILED','CANCELLED','EXPIRED','REFUNDED')
-    )
-);
-GO
-
-CREATE INDEX IX_payments_student_course ON payments(student_id, course_id);
-GO
-
-CREATE INDEX IX_payments_status ON payments(status);
-GO
-
-CREATE INDEX IX_payments_created_at ON payments(created_at DESC);
-GO
+CREATE TABLE payments(
+id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+student_id UNIQUEIDENTIFIER REFERENCES users(id),
+course_id UNIQUEIDENTIFIER REFERENCES courses(id),
+enrollment_id UNIQUEIDENTIFIER REFERENCES enrollments(id),
+amount DECIMAL(10,2),
+status NVARCHAR(20),
+created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
+)
 
 /* =========================================================
-   SEED ROLES (NO SAMPLE VOCAB DATA)
+ADD MORE COURSES
 ========================================================= */
-IF NOT EXISTS (SELECT 1 FROM roles WHERE id = 1)
+
+INSERT INTO courses(teacher_id,title,description,price,total_duration_minutes)
+SELECT id,'Business English','English for workplace communication',299000,200
+FROM users WHERE email='teacher2@gmail.com'
+
+INSERT INTO courses(teacher_id,title,description,price,total_duration_minutes)
+SELECT id,'IELTS Writing Task 2','Essay writing strategies',249000,160
+FROM users WHERE email='teacher2@gmail.com'
+
+INSERT INTO courses(teacher_id,title,description,price,total_duration_minutes)
+SELECT id,'English Pronunciation Mastery','Improve pronunciation',149000,140
+FROM users WHERE email='teacher1@gmail.com'
+
+
+/* =========================================================
+ADD MANY STUDENTS
+========================================================= */
+
+DECLARE @i INT = 1
+
+WHILE @i <= 30
 BEGIN
-  INSERT INTO roles (id, code, description) VALUES
-  (1, 'ADMIN',   'System administrator'),
-  (2, 'TEACHER', 'Course creator'),
-  (3, 'STUDENT', 'Learner'),
-  (4, 'GUEST',   'Unauthenticated user');
+
+INSERT INTO users(
+email,
+password_hash,
+full_name,
+role_id,
+is_verified
+)
+VALUES(
+'student_auto'+CAST(@i AS NVARCHAR)+'@gmail.com',
+'$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG',
+'Student Auto '+CAST(@i AS NVARCHAR),
+3,
+1
+)
+
+SET @i = @i + 1
+
 END
-GO
+
 
 /* =========================================================
-   DEFAULT ADMIN ACCOUNT (email: admin@gmail.com / pass: Admin@123)
+GENERATE MANY ENROLLMENTS
 ========================================================= */
-IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@gmail.com')
+
+DECLARE @count INT = 1
+
+WHILE @count <= 150
 BEGIN
-    INSERT INTO users (
-        email,
-        password_hash,
-        full_name,
-        role_id,
-        is_verified,
-        is_active,
-        is_deleted
-    )
-    VALUES (
-        'admin@gmail.com',
-        '$2b$10$BbqsiLMnJ7EXqcD23EFoC.E9FqOmkn0wlJKgwjNdMUy6OrF2EhnNG',
-        'System Admin',
-        1,
-        1,
-        1,
-        0
-    );
+
+DECLARE @student UNIQUEIDENTIFIER
+DECLARE @course UNIQUEIDENTIFIER
+
+SELECT TOP 1 @student = id
+FROM users
+WHERE role_id = 3
+ORDER BY NEWID()
+
+SELECT TOP 1 @course = id
+FROM courses
+ORDER BY NEWID()
+
+INSERT INTO enrollments(
+student_id,
+course_id,
+progress_percent,
+enrolled_at
+)
+VALUES(
+@student,
+@course,
+ABS(CHECKSUM(NEWID())) % 100,
+DATEADD(day,-ABS(CHECKSUM(NEWID())) % 120,GETDATE())
+)
+
+SET @count = @count + 1
+
 END
-GO
+
+
+/* =========================================================
+GENERATE PAYMENTS
+========================================================= */
+
+DECLARE @pay INT = 1
+
+WHILE @pay <= 200
+BEGIN
+
+DECLARE @enrollment UNIQUEIDENTIFIER
+DECLARE @studentP UNIQUEIDENTIFIER
+DECLARE @courseP UNIQUEIDENTIFIER
+DECLARE @price DECIMAL(10,2)
+
+SELECT TOP 1
+@enrollment = e.id,
+@studentP = e.student_id,
+@courseP = e.course_id
+FROM enrollments e
+ORDER BY NEWID()
+
+SELECT @price = price
+FROM courses
+WHERE id = @courseP
+
+INSERT INTO payments(
+student_id,
+course_id,
+enrollment_id,
+amount,
+status,
+created_at
+)
+VALUES(
+@studentP,
+@courseP,
+@enrollment,
+@price,
+CASE 
+WHEN RAND(CHECKSUM(NEWID())) > 0.1 THEN 'SUCCESS'
+ELSE 'FAILED'
+END,
+DATEADD(day,-ABS(CHECKSUM(NEWID())) % 120,GETDATE())
+)
+
+SET @pay = @pay + 1
+
+END
+
+
+/* =========================================================
+PRONUNCIATION PRACTICE DATA
+========================================================= */
+
+DECLARE @p INT = 1
+
+WHILE @p <= 120
+BEGIN
+
+DECLARE @studentPr UNIQUEIDENTIFIER
+DECLARE @vocab UNIQUEIDENTIFIER
+
+SELECT TOP 1 @studentPr = id
+FROM users
+WHERE role_id = 3
+ORDER BY NEWID()
+
+SELECT TOP 1 @vocab = id
+FROM vocabularies
+ORDER BY NEWID()
+
+INSERT INTO pronunciation_practice(
+student_id,
+vocabulary_id,
+spoken_text,
+accuracy_percent,
+practiced_at
+)
+VALUES(
+@studentPr,
+@vocab,
+'Sample pronunciation',
+60 + ABS(CHECKSUM(NEWID())) % 40,
+DATEADD(day,-ABS(CHECKSUM(NEWID())) % 60,GETDATE())
+)
+
+SET @p = @p + 1
+
+END

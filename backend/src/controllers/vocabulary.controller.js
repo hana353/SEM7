@@ -18,3 +18,59 @@ exports.createTopic = async (req, res) => {
     return res.status(400).json({ message: e.message });
   }
 };
+
+exports.getWordsByTopic = async (req, res) => {
+  try {
+    const { topicId } = req.params;
+    const data = await vocabularyService.getWordsByTopic(topicId);
+    return res.json({ data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
+exports.createWord = async (req, res) => {
+  try {
+    const { topicId } = req.params;
+    const { word, meaning, exampleSentence } = req.body;
+    const data = await vocabularyService.createVocabularyWord(
+      topicId,
+      word,
+      meaning,
+      exampleSentence
+    );
+    return res.status(201).json({ message: "created", data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
+exports.logPractice = async (req, res) => {
+  try {
+    const studentId = req.user?.id;
+    const { vocabularyId, spokenText, accuracyPercent } = req.body;
+    const data = await vocabularyService.logPronunciationPractice(
+      studentId,
+      vocabularyId,
+      spokenText,
+      accuracyPercent
+    );
+    return res.status(201).json({ message: "logged", data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
+exports.getRemindWords = async (req, res) => {
+  try {
+    const studentId = req.user?.id;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const data = await vocabularyService.getRemindWordsForStudent(
+      studentId,
+      Number.isFinite(limit) && limit > 0 ? limit : 20
+    );
+    return res.json({ data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
