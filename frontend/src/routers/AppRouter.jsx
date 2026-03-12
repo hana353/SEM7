@@ -5,6 +5,7 @@ import AdminHomePage from "../pages/admin/AdminHomePage";
 import TeacherHomePage from "../pages/teacher/TeacherHomePage";
 import TeacherCourseDetail from "../pages/teacher/TeacherCourseDetail";
 import StudentHomePage from "../pages/student/StudentHomePage";
+import StudentCourseDetail from "../pages/student/StudentCourseDetail";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getRoleCode } from "../auth/session";
 import { getHomeRouteByRole, ROLE } from "../auth/roleRoutes";
@@ -22,6 +23,7 @@ export default function AppRouter() {
 
         <Route element={<ProtectedRoute allowRoles={[ROLE.STUDENT]} />}>
           <Route path="/studenthomepage" element={<StudentHomePage />} />
+          <Route path="/student/course/:courseId" element={<StudentCourseDetail />} />
         </Route>
 
         <Route element={<ProtectedRoute allowRoles={[ROLE.ADMIN]} />}>

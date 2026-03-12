@@ -28,6 +28,23 @@ exports.promoteToTeacher = async (req, res) => {
   }
 };
 
+exports.changeRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+    if (!id) return bad(res, "Missing user id");
+    if (!role) return bad(res, "Missing role (TEACHER or STUDENT)");
+
+    const user = await userService.changeRole(id, role);
+    return res.json({
+      message: `Vai trò đã chuyển thành ${user.role_code}`,
+      data: user,
+    });
+  } catch (err) {
+    return bad(res, err.message || "Failed to change role");
+  }
+};
+
 exports.softDeleteUser = async (req, res) => {
   try {
     const { id } = req.params;

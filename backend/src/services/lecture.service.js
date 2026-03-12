@@ -52,6 +52,27 @@ async function teacherGetLectures(teacherId, courseId) {
   return getLecturesByCourseId(courseId);
 }
 
+async function assertStudentEnrolled(studentId, courseId) {
+  await poolConnect;
+  const rs = await pool
+    .request()
+    .input("student_id", sql.UniqueIdentifier, studentId)
+    .input("course_id", sql.UniqueIdentifier, courseId)
+    .query(`
+      SELECT TOP 1 id
+      FROM enrollments
+      WHERE student_id = @student_id AND course_id = @course_id
+    `);
+  if (rs.recordset.length === 0) {
+    throw new Error("Bạn chưa đăng ký khóa học này");
+  }
+}
+
+async function studentGetLectures(studentId, courseId) {
+  await assertStudentEnrolled(studentId, courseId);
+  return getLecturesByCourseId(courseId);
+}
+
 async function teacherCreateLecture(teacherId, courseId, payload) {
   await assertCourseAssignedToTeacher(teacherId, courseId);
 
@@ -158,4 +179,5 @@ module.exports = {
   teacherCreateLecture,
   teacherUpdateLecture,
   teacherDeleteLecture,
+  studentGetLectures,
 };

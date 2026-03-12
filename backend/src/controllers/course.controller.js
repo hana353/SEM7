@@ -29,6 +29,15 @@ exports.getAssignedToTeacher = async (req, res) => {
   }
 };
 
+exports.getMyCourses = async (req, res) => {
+  try {
+    const courses = await courseService.getCoursesForStudent(req.user.id);
+    return res.json({ data: courses });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+};
+
 exports.createByAdmin = async (req, res) => {
   try {
     const result = await courseService.createCourseByAdmin(req.body, req.user.id);

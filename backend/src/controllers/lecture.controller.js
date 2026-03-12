@@ -10,6 +10,16 @@ exports.teacherGetAllLectures = async (req, res) => {
   }
 };
 
+exports.studentGetLectures = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const data = await lectureService.studentGetLectures(req.user.id, courseId);
+    return res.json({ data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
 exports.teacherGetLectures = async (req, res) => {
   try {
     const { courseId } = req.params;

@@ -58,6 +58,34 @@ async function getAllCourses() {
 }
 
 /**
+ * Student: các khóa học đã ghi danh (đã mua / đã enroll)
+ */
+async function getCoursesForStudent(studentId) {
+  await poolConnect;
+
+  const rs = await pool
+    .request()
+    .input("student_id", sql.UniqueIdentifier, studentId)
+    .query(`
+      SELECT 
+        c.id, c.teacher_id, c.title, c.description, c.price, c.status,
+        c.total_duration_minutes, c.created_at,
+        u.full_name AS teacher_name, u.email AS teacher_email,
+        e.enrolled_at, e.progress_percent
+      FROM enrollments e
+      JOIN courses c 
+        ON c.id = e.course_id
+       AND (c.status IS NULL OR c.status <> 'DELETED')
+      LEFT JOIN users u 
+        ON u.id = c.teacher_id AND u.is_active = 1 AND u.is_deleted = 0
+      WHERE e.student_id = @student_id
+      ORDER BY e.enrolled_at DESC
+    `);
+
+  return rs.recordset;
+}
+
+/**
  * Teacher: danh sách khóa học được admin gán (teacher_id = teacherId)
  */
 async function getCoursesByTeacherId(teacherId) {
@@ -299,6 +327,7 @@ module.exports = {
   getAllCourses,
   getCourseById,
   getCoursesByTeacherId,
+  getCoursesForStudent,
   createCourseByAdmin,
   assignTeacherToCourse,
   updateCourseByAdmin,

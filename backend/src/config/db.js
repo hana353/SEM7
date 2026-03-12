@@ -54,6 +54,139 @@ async function ensureSchema() {
       ON otp_codes(email, type, created_at DESC);
     END
   `);
+
+  // Ensure quiz_sets has extended columns
+  await pool.request().query(`
+    IF COL_LENGTH('quiz_sets', 'description') IS NULL
+    BEGIN
+      ALTER TABLE quiz_sets ADD description NVARCHAR(MAX) NULL;
+    END;
+
+    IF COL_LENGTH('quiz_sets', 'is_deleted') IS NULL
+    BEGIN
+      ALTER TABLE quiz_sets ADD is_deleted BIT NOT NULL CONSTRAINT DF_quiz_sets_is_deleted DEFAULT 0;
+    END;
+
+    IF COL_LENGTH('quiz_sets', 'created_at') IS NULL
+    BEGIN
+      ALTER TABLE quiz_sets ADD created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_sets_created_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+
+    IF COL_LENGTH('quiz_sets', 'updated_at') IS NULL
+    BEGIN
+      ALTER TABLE quiz_sets ADD updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_sets_updated_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+  `);
+
+  // Ensure quiz_cards has extended columns
+  await pool.request().query(`
+    IF COL_LENGTH('quiz_cards', 'front_image_url') IS NULL
+    BEGIN
+      ALTER TABLE quiz_cards ADD front_image_url NVARCHAR(500) NULL;
+    END;
+
+    IF COL_LENGTH('quiz_cards', 'back_image_url') IS NULL
+    BEGIN
+      ALTER TABLE quiz_cards ADD back_image_url NVARCHAR(500) NULL;
+    END;
+
+    IF COL_LENGTH('quiz_cards', 'is_deleted') IS NULL
+    BEGIN
+      ALTER TABLE quiz_cards ADD is_deleted BIT NOT NULL CONSTRAINT DF_quiz_cards_is_deleted DEFAULT 0;
+    END;
+
+    IF COL_LENGTH('quiz_cards', 'created_at') IS NULL
+    BEGIN
+      ALTER TABLE quiz_cards ADD created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_cards_created_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+
+    IF COL_LENGTH('quiz_cards', 'updated_at') IS NULL
+    BEGIN
+      ALTER TABLE quiz_cards ADD updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_quiz_cards_updated_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+  `);
+
+  // Ensure tests and related tables have extended columns used by services
+  await pool.request().query(`
+    IF COL_LENGTH('tests', 'description') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD description NVARCHAR(MAX) NULL;
+    END;
+
+    IF COL_LENGTH('tests', 'max_attempts') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD max_attempts INT NULL;
+    END;
+
+    IF COL_LENGTH('tests', 'shuffle_questions') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD shuffle_questions BIT NOT NULL CONSTRAINT DF_tests_shuffle_questions DEFAULT 0;
+    END;
+
+    IF COL_LENGTH('tests', 'shuffle_choices') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD shuffle_choices BIT NOT NULL CONSTRAINT DF_tests_shuffle_choices DEFAULT 0;
+    END;
+
+    IF COL_LENGTH('tests', 'open_at') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD open_at DATETIMEOFFSET NULL;
+    END;
+
+    IF COL_LENGTH('tests', 'close_at') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD close_at DATETIMEOFFSET NULL;
+    END;
+
+    IF COL_LENGTH('tests', 'is_deleted') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD is_deleted BIT NOT NULL CONSTRAINT DF_tests_is_deleted DEFAULT 0;
+    END;
+
+    IF COL_LENGTH('tests', 'created_at') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_tests_created_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+
+    IF COL_LENGTH('tests', 'updated_at') IS NULL
+    BEGIN
+      ALTER TABLE tests ADD updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_tests_updated_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+  `);
+
+  await pool.request().query(`
+    IF COL_LENGTH('test_questions', 'position') IS NULL
+    BEGIN
+      ALTER TABLE test_questions ADD position INT NULL;
+    END;
+
+    IF COL_LENGTH('test_questions', 'is_deleted') IS NULL
+    BEGIN
+      ALTER TABLE test_questions ADD is_deleted BIT NOT NULL CONSTRAINT DF_test_questions_is_deleted DEFAULT 0;
+    END;
+
+    IF COL_LENGTH('test_questions', 'created_at') IS NULL
+    BEGIN
+      ALTER TABLE test_questions ADD created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_questions_created_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+
+    IF COL_LENGTH('test_questions', 'updated_at') IS NULL
+    BEGIN
+      ALTER TABLE test_questions ADD updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_test_questions_updated_at DEFAULT SYSDATETIMEOFFSET();
+    END;
+  `);
+
+  await pool.request().query(`
+    IF COL_LENGTH('test_choices', 'position') IS NULL
+    BEGIN
+      ALTER TABLE test_choices ADD position INT NULL;
+    END;
+
+    IF COL_LENGTH('test_choices', 'is_deleted') IS NULL
+    BEGIN
+      ALTER TABLE test_choices ADD is_deleted BIT NOT NULL CONSTRAINT DF_test_choices_is_deleted DEFAULT 0;
+    END;
+  `);
 }
 
 module.exports = { sql, pool, poolConnect, getPool, ensureSchema };

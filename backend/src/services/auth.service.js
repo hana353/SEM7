@@ -176,9 +176,48 @@ async function resendOtp({ email, type = "register" }) {
   return { message: "OTP resent.", email, otp_expires_at: expiresAt };
 }
 
+async function changePassword({ userId, oldPassword, newPassword }) {
+  const pool = await getPool();
+
+  const rs = await pool
+    .request()
+    .input("id", sql.UniqueIdentifier, userId)
+    .query(`
+      SELECT id, password_hash
+      FROM users
+      WHERE id = @id AND is_deleted = 0
+    `);
+
+  const user = rs.recordset[0];
+  if (!user) throw new Error("User not found");
+
+  const ok = await bcrypt.compare(oldPassword, user.password_hash);
+  if (!ok) throw new Error("Mật khẩu cũ không đúng");
+
+  if (!newPassword || String(newPassword).length < 6) {
+    throw new Error("Mật khẩu mới phải có ít nhất 6 ký tự");
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  await pool
+    .request()
+    .input("id", sql.UniqueIdentifier, userId)
+    .input("password_hash", sql.NVarChar, passwordHash)
+    .query(`
+      UPDATE users
+      SET password_hash = @password_hash,
+          updated_at = SYSDATETIMEOFFSET()
+      WHERE id = @id
+    `);
+
+  return { message: "Đổi mật khẩu thành công." };
+}
+
 module.exports = {
   register,
   verifyOtp,
   login,
   resendOtp,
+  changePassword,
 };

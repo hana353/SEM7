@@ -1,99 +1,212 @@
 import { useEffect, useState } from "react";
-import axiosInstance from "../../api/axios";
-import { getSession, getUserId } from "../../auth/session";
+import api from "../../api/axios";
+import { getStoredUser, getUserId } from "../../auth/session";
 
 const Profile = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
   useEffect(() => {
     const fetchUserProfile = async () => {
+      const userId = getUserId();
+      if (!userId) {
+        setUser(getStoredUser());
+        setError(null);
+        setLoading(false);
+        return;
+      }
       try {
-        // Lấy userId
-        const userId = getUserId();
-        console.log("userId from localStorage:", userId);
-        
-        if (!userId) {
-          setError("Không tìm thấy userId. Vui lòng đăng nhập lại.");
-          setLoading(false);
-          return;
-        }
-
-        // Gọi API
-        console.log(`Fetching /api/users/${userId}`);
-        const response = await axiosInstance.get(`/users/${userId}`);
-        console.log("API Response:", response.data);
-        
-        setUser(response.data.data);
+        const res = await api.get(`/users/${userId}`);
+        setUser(res.data?.data || getStoredUser());
         setError(null);
       } catch (err) {
-        console.error("Fetch user profile error:", err);
-        const errorMsg = err.response?.data?.message || err.message || "Lỗi khi tải hồ sơ cá nhân";
-        setError(errorMsg);
+        setUser(getStoredUser());
+        setError(err.response?.data?.message || "Không tải được hồ sơ");
       } finally {
         setLoading(false);
       }
     };
-
     fetchUserProfile();
   }, []);
 
-  if (loading) return <div className="text-center py-10">Đang tải...</div>;
-  if (error) return <div className="text-red-500 text-center py-10">{error}</div>;
-  if (!user) return <div className="text-center py-10">Không tìm thấy dữ liệu người dùng</div>;
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (!oldPassword.trim()) {
+      setPasswordError("Vui lòng nhập mật khẩu cũ.");
+      return;
+    }
+    if (!newPassword.trim()) {
+      setPasswordError("Vui lòng nhập mật khẩu mới.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError("Mật khẩu mới phải có ít nhất 6 ký tự.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Mật khẩu mới và xác nhận không trùng khớp.");
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await api.post("/auth/change-password", {
+        oldPassword: oldPassword.trim(),
+        newPassword: newPassword.trim(),
+      });
+      setPasswordSuccess("Đổi mật khẩu thành công.");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setPasswordError(err.response?.data?.message || "Đổi mật khẩu thất bại.");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-sm text-slate-500">
+        Đang tải hồ sơ…
+      </div>
+    );
+  }
+
+  const displayUser = user || getStoredUser();
+  const fullName = displayUser?.full_name || displayUser?.fullName || displayUser?.name || "Chưa cập nhật";
+  const email = displayUser?.email || "—";
+  const role = displayUser?.role_code || displayUser?.role || "STUDENT";
+  const phone = displayUser?.phone || "—";
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow">
-      {/* Thông tin cá nhân */}
-      <section className="mb-8">
-        <h2 className="text-2xl font-bold mb-4">Thông tin cá nhân</h2>
-        <div className="space-y-3">
-          <p><strong>Tên:</strong> {user.full_name || user.fullName || user.name || "Chưa cập nhật"}</p>
-          <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>Vai trò:</strong> {user.role_code || user.role || "STUDENT"}</p>
-          <p><strong>Level dự đoán:</strong> {user.level || "Chưa xác định"}</p>
-          <p><strong>Ngôn ngữ giao diện:</strong> {user.language || "Tiếng Việt"}</p>
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h1 className="text-sm font-semibold text-slate-900">Hồ sơ cá nhân</h1>
+        <p className="mt-1 text-xs text-slate-500">
+          Xem và cập nhật thông tin tài khoản của bạn.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800">
+          {error}
         </div>
+      )}
+
+      <section className="rounded-xl bg-white shadow-sm border border-slate-200 p-4">
+        <h2 className="text-sm font-semibold text-slate-900 mb-4">
+          Thông tin cá nhân
+        </h2>
+        <dl className="grid gap-3 sm:grid-cols-2 text-sm">
+          <div>
+            <dt className="text-xs font-medium text-slate-500">Họ tên</dt>
+            <dd className="mt-0.5 font-medium text-slate-900">{fullName}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-slate-500">Email</dt>
+            <dd className="mt-0.5 text-slate-700">{email}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-slate-500">Số điện thoại</dt>
+            <dd className="mt-0.5 text-slate-700">{phone}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-slate-500">Vai trò</dt>
+            <dd className="mt-0.5 text-slate-700">{role}</dd>
+          </div>
+        </dl>
       </section>
 
-      {/* Lịch sử học tập */}
-      <section className="mb-8">
-        <h2 className="text-2xl font-bold mb-4">Lịch sử học tập</h2>
-        <div className="space-y-2">
-          <p><strong>Tổng khóa học:</strong> {user.totalCourses || 0}</p>
-          <p><strong>Khóa học hoàn thành:</strong> {user.completedCourses || 0}</p>
-          <p><strong>Thời gian học:</strong> {user.studyTime || "0"} giờ</p>
-        </div>
-      </section>
+      <section className="rounded-xl bg-white shadow-sm border border-slate-200 p-4">
+        <h2 className="text-sm font-semibold text-slate-900 mb-4">
+          Đổi mật khẩu
+        </h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Để đổi mật khẩu, vui lòng nhập đúng mật khẩu hiện tại và mật khẩu mới.
+        </p>
 
-      {/* Huy hiệu (Gamification) */}
-      <section className="mb-8">
-        <h2 className="text-2xl font-bold mb-4">Huy hiệu</h2>
-        <div className="flex gap-4">
-          {user.badges && user.badges.length > 0 ? (
-            user.badges.map((badge, idx) => (
-              <div key={idx} className="text-4xl">{badge}</div>
-            ))
-          ) : (
-            <p className="text-gray-500">Chưa có huy hiệu nào</p>
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          <div>
+            <label
+              htmlFor="old-password"
+              className="block text-xs font-medium text-slate-700 mb-1"
+            >
+              Mật khẩu hiện tại
+            </label>
+            <input
+              id="old-password"
+              type="password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              placeholder="Nhập mật khẩu cũ"
+              autoComplete="current-password"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="new-password"
+              className="block text-xs font-medium text-slate-700 mb-1"
+            >
+              Mật khẩu mới
+            </label>
+            <input
+              id="new-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              placeholder="Tối thiểu 6 ký tự"
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="confirm-password"
+              className="block text-xs font-medium text-slate-700 mb-1"
+            >
+              Xác nhận mật khẩu mới
+            </label>
+            <input
+              id="confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              placeholder="Nhập lại mật khẩu mới"
+              autoComplete="new-password"
+            />
+          </div>
+
+          {passwordError && (
+            <p className="text-xs text-red-600">{passwordError}</p>
           )}
-        </div>
-      </section>
+          {passwordSuccess && (
+            <p className="text-xs text-emerald-600">{passwordSuccess}</p>
+          )}
 
-      {/* Cài đặt */}
-      <section>
-        <h2 className="text-2xl font-bold mb-4">Cài đặt</h2>
-        <div className="space-y-3">
-          <label className="flex items-center">
-            <input type="checkbox" defaultChecked={user.microphoneEnabled !== false} className="mr-2" />
-            <span>Bật microphone mặc định</span>
-          </label>
-          <label className="flex items-center">
-            <input type="checkbox" defaultChecked className="mr-2" />
-            <span>Nhận thông báo học tập</span>
-          </label>
-        </div>
+          <button
+            type="submit"
+            disabled={changingPassword}
+            className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {changingPassword ? "Đang xử lý…" : "Đổi mật khẩu"}
+          </button>
+        </form>
       </section>
     </div>
   );

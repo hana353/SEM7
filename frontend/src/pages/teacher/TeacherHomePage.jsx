@@ -91,16 +91,16 @@ export default function TeacherHomePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <aside className="w-64 bg-slate-900 text-slate-50 flex flex-col">
-        <div className="px-5 py-4 border-b border-slate-800">
+      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900 text-slate-50 flex flex-col z-10">
+        <div className="shrink-0 px-5 py-4 border-b border-slate-800">
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Teacher
           </p>
-          <p className="mt-1 text-sm font-semibold">
+          <p className="mt-1 text-sm font-semibold truncate">
             Teaching Management Workspace
           </p>
         </div>
-        <nav className="flex-1 px-2 py-3 space-y-1 text-sm">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-3 space-y-1 text-sm">
           {sidebarItems.map((item) => {
             const isActive = activeSection === item.id;
             return (
@@ -122,7 +122,7 @@ export default function TeacherHomePage() {
             );
           })}
         </nav>
-        <div className="px-4 py-3 border-t border-slate-800 text-xs text-slate-300">
+        <div className="shrink-0 px-4 py-3 border-t border-slate-800 text-xs text-slate-300">
           <p className="truncate">
             {user?.full_name || user?.email || "Teacher"}
           </p>
@@ -138,7 +138,7 @@ export default function TeacherHomePage() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col ml-64 min-w-0">
         <header className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur flex items-center justify-between px-6">
           <div>
             <h1 className="text-sm font-semibold text-slate-900">

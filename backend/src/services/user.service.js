@@ -47,18 +47,27 @@ async function getAllUsers() {
   return rs.recordset;
 }
 
-async function promoteToTeacher(userId) {
-  const pool = await getPool();
+const ROLE_IDS = { ADMIN: 1, TEACHER: 2, STUDENT: 3, GUEST: 4 };
 
-  // role_id = 2 => TEACHER (xem trong init.sql)
+async function changeRole(userId, newRoleCode) {
+  const pool = await getPool();
+  const roleId = ROLE_IDS[String(newRoleCode).toUpperCase()];
+  if (!roleId || (roleId !== 2 && roleId !== 3)) {
+    throw new Error("Chỉ được chuyển vai trò thành TEACHER hoặc STUDENT");
+  }
+
   const rs = await pool
     .request()
     .input("id", sql.UniqueIdentifier, userId)
+    .input("role_id", sql.SmallInt, roleId)
     .query(`
       UPDATE users
-      SET role_id = 2,
+      SET role_id = @role_id,
           updated_at = SYSDATETIMEOFFSET()
-      WHERE id = @id AND is_deleted = 0;
+      WHERE id = @id AND is_deleted = 0 AND role_id IN (2, 3);
+
+      IF @@ROWCOUNT = 0
+        THROW 50001, 'User not found or cannot change role (Admin cannot be changed)', 1;
 
       SELECT 
         u.id,
@@ -77,12 +86,15 @@ async function promoteToTeacher(userId) {
       WHERE u.id = @id;
     `);
 
-  const rows = rs.recordsets?.[1] || rs.recordset || [];
-  const user = rows[0];
+  const user = (rs.recordsets?.[1] || rs.recordset || [])[0];
   if (!user) {
-    throw new Error("User not found or already deleted");
+    throw new Error("User not found or cannot change role");
   }
   return user;
+}
+
+async function promoteToTeacher(userId) {
+  return changeRole(userId, "TEACHER");
 }
 
 async function softDeleteUser(userId) {
@@ -128,6 +140,7 @@ module.exports = {
   getUserById,
   getAllUsers,
   promoteToTeacher,
+  changeRole,
   softDeleteUser,
 };
 

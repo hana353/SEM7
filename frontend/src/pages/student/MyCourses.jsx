@@ -1,38 +1,100 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 
 const MyCourses = () => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get("/courses")
-      .then(res => setCourses(Array.isArray(res.data) ? res.data : []))
+    api
+      .get("/courses/student/my")
+      .then(res => setCourses(res.data?.data || []))
       .catch(err => {
         console.error(err);
-        setError(err.response?.data?.message || "Không tải được danh sách khóa học");
+        setError(
+          err.response?.data?.message || "Không tải được danh sách khóa học đã mua"
+        );
       })
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-6 text-center py-10">Đang tải...</div>;
-  if (error) return <div className="p-6 text-red-500 text-center py-10">{error}</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-sm text-slate-500">
+        Đang tải danh sách khóa học…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-16 text-sm text-red-500">
+        {error}
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">Khóa học của tôi</h1>
-      <p className="text-gray-600 mb-4">Danh sách khóa học có sẵn. (API enrollment đang chờ phát triển để hiển thị khóa đã đăng ký.)</p>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-sm font-semibold text-slate-900">
+          Khóa học của tôi
+        </h1>
+        <p className="mt-1 text-xs text-slate-500">
+          Các khóa học bạn đã đăng ký / thanh toán thành công.
+        </p>
+      </div>
+
       {courses.length === 0 ? (
-        <p className="text-gray-500">Chưa có khóa học nào.</p>
+        <div className="rounded-xl bg-white shadow-sm border border-slate-200 p-6 text-sm text-slate-500 text-center">
+          Bạn chưa đăng ký khóa học nào.
+        </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {courses.map(course => (
-            <div key={course.id} className="p-4 bg-white rounded-lg shadow border">
-              <h3 className="font-semibold text-lg">{course.title}</h3>
-              {course.description && <p className="text-gray-600 text-sm mt-1">{course.description}</p>}
-              <p className="mt-2 text-slate-700">{Number(course.price || 0).toLocaleString("vi-VN")} VND</p>
-              {course.teacher_name && <p className="text-sm text-slate-500">Giáo viên: {course.teacher_name}</p>}
+            <div
+              key={course.id}
+              className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 flex flex-col"
+            >
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-slate-900 line-clamp-2">
+                  {course.title}
+                </h3>
+                {course.description && (
+                  <p className="mt-2 text-xs text-slate-600 line-clamp-3">
+                    {course.description}
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 text-xs text-slate-500 space-y-1">
+                <p>
+                  Giá:{" "}
+                  <span className="font-semibold text-slate-800">
+                    {Number(course.price || 0) === 0
+                      ? "Miễn phí"
+                      : `${Number(course.price || 0).toLocaleString("vi-VN")} VND`}
+                  </span>
+                </p>
+                {course.teacher_name && (
+                  <p>Giáo viên: {course.teacher_name}</p>
+                )}
+                {course.enrolled_at && (
+                  <p>
+                    Đã ghi danh:{" "}
+                    {new Date(course.enrolled_at).toLocaleDateString("vi-VN")}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate(`/student/course/${course.id}`)}
+                className="mt-3 inline-flex items-center justify-center rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                Vào học
+              </button>
             </div>
           ))}
         </div>

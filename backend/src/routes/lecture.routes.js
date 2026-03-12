@@ -10,4 +10,7 @@ router.post("/course/:courseId", requireAuth, requireRole("TEACHER"), controller
 router.patch("/:lectureId", requireAuth, requireRole("TEACHER"), controller.teacherUpdateLecture);
 router.delete("/:lectureId", requireAuth, requireRole("TEACHER"), controller.teacherDeleteLecture);
 
+// Student: xem danh sách bài giảng trong khóa đã ghi danh
+router.get("/student/course/:courseId", requireAuth, requireRole("STUDENT"), controller.studentGetLectures);
+
 module.exports = router;

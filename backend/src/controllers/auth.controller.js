@@ -51,3 +51,23 @@ exports.resendOtp = async (req, res) => {
     return res.status(400).json({ message: err.message || "Resend OTP failed" });
   }
 };
+
+exports.changePassword = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword) return bad(res, "Vui lòng nhập mật khẩu cũ");
+    if (!newPassword) return bad(res, "Vui lòng nhập mật khẩu mới");
+
+    const result = await authService.changePassword({
+      userId,
+      oldPassword,
+      newPassword,
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "Change password failed" });
+  }
+};
