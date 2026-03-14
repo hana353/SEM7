@@ -25,9 +25,9 @@ async function vnpayReturn(req, res) {
     const vnpParams = { ...req.query };
     const result = await paymentService.handleVnpayCallback(vnpParams);
 
-    // Nếu bạn có frontend, có thể redirect về FE theo result.ok
-    // Ví dụ: return res.redirect(`${process.env.FRONTEND_URL}/payment-result?...`)
-    return res.json(result);
+    // Redirect về frontend với query params
+    const responseCode = vnpParams.vnp_ResponseCode || '99';
+    return res.redirect(`${process.env.FRONTEND_URL}/student/payment-result?vnp_ResponseCode=${responseCode}`);
   } catch (e) {
     return res.status(400).json({ message: e.message });
   }

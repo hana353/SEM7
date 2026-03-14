@@ -16,6 +16,12 @@ function getClientIp(req) {
   return req.socket?.remoteAddress || req.ip || "127.0.0.1";
 }
 
+function getBaseUrl(req) {
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  return `${proto}://${host}`;
+}
+
 function generateTxnRef() {
   const now = new Date();
   const stamp = formatVnpDate(now);
@@ -63,9 +69,11 @@ async function createEnrollmentIfNotExists(trxRequest, studentId, courseId) {
  * - If course is free (price=0): enroll directly and return enrolled=true (no VNPay)
  */
 async function createCoursePaymentUrl({ studentId, courseId, req }) {
-  if (!vnpayConfig.tmnCode || !vnpayConfig.hashSecret || !vnpayConfig.returnUrl) {
+  const isDemoMode = process.env.PAYMENT_DEMO === 'true';
+
+  if (!isDemoMode && !vnpayConfig.tmnCode) {
     throw new Error(
-      "Thiếu cấu hình VNPay (VNPAY_TMN_CODE / VNPAY_HASH_SECRET / VNPAY_RETURN_URL)"
+      "Thiếu cấu hình VNPay (VNPAY_TMN_CODE / VNPAY_HASH_SECRET)"
     );
   }
 
@@ -102,6 +110,25 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
     }
   }
 
+  // Demo mode: enroll directly (bypass VNPay)
+  if (isDemoMode) {
+    await poolConnect;
+    const t = new sql.Transaction(pool);
+    await t.begin();
+    try {
+      const r = new sql.Request(t);
+      const enrollmentId = await createEnrollmentIfNotExists(r, studentId, courseId);
+      await t.commit();
+      return {
+        message: "Demo mode: đã đăng ký khóa học thành công (bypass VNPay)",
+        data: { enrolled: true, enrollment_id: enrollmentId, course_id: courseId },
+      };
+    } catch (e) {
+      await t.rollback();
+      throw e;
+    }
+  }
+
   // Create payment record PENDING
   await poolConnect;
   const txnRef = generateTxnRef();
@@ -119,10 +146,10 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
     .input("amount", sql.Decimal(12, 2), price)
     .query(`
       INSERT INTO payments
-        (student_id, course_id, enrollment_id, payment_method, txn_ref, order_info, amount, status, created_at, updated_at)
+        (student_id, course_id, enrollment_id, payment_method, txn_ref, order_info, amount, status, created_at)
       OUTPUT INSERTED.id
       VALUES
-        (@student_id, @course_id, NULL, @payment_method, @txn_ref, @order_info, @amount, 'PENDING', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET())
+        (@student_id, @course_id, NULL, @payment_method, @txn_ref, @order_info, @amount, 'PENDING', SYSDATETIMEOFFSET())
     `);
 
   const paymentId = insert.recordset[0].id;
@@ -149,7 +176,7 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
     vnp_OrderInfo: orderInfo,
     vnp_OrderType: vnpayConfig.orderType,
     vnp_Locale: vnpayConfig.locale,
-    vnp_ReturnUrl: vnpayConfig.returnUrl,
+    vnp_ReturnUrl: `${getBaseUrl(req)}/api/payments/vnpay-return`,
     vnp_IpAddr: ipAddr,
     vnp_CreateDate: createDate,
     vnp_ExpireDate: expireDate,
@@ -259,8 +286,7 @@ async function handleVnpayCallback(vnpParams) {
           response_code = @response_code,
           transaction_status = @transaction_status,
           pay_date = @pay_date,
-          gateway_response = @gateway_response,
-          updated_at = SYSDATETIMEOFFSET()
+          gateway_response = @gateway_response
         WHERE id = @id
       `);
 
@@ -274,7 +300,7 @@ async function handleVnpayCallback(vnpParams) {
         .input("enrollment_id", sql.UniqueIdentifier, enrollmentId)
         .query(`
           UPDATE payments
-          SET enrollment_id = @enrollment_id, updated_at = SYSDATETIMEOFFSET()
+          SET enrollment_id = @enrollment_id
           WHERE id = @pid
         `);
     }
@@ -309,7 +335,7 @@ async function getMyPayments(studentId) {
         p.id, p.course_id, c.title AS course_title,
         p.amount, p.status, p.payment_method, p.txn_ref,
         p.response_code, p.transaction_status, p.bank_code,
-        p.created_at, p.updated_at, p.pay_date
+        p.created_at, p.pay_date
       FROM payments p
       JOIN courses c ON c.id = p.course_id
       WHERE p.student_id = @student_id

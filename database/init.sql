@@ -274,6 +274,10 @@ status NVARCHAR(20),
 created_at DATETIMEOFFSET DEFAULT SYSDATETIMEOFFSET()
 )
 
+ALTER TABLE payments ADD payment_method NVARCHAR(30)
+ALTER TABLE payments ADD txn_ref NVARCHAR(100)
+ALTER TABLE payments ADD order_info NVARCHAR(255)
+
 /* =========================================================
 ADD MORE COURSES
 ========================================================= */

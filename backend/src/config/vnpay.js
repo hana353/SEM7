@@ -7,7 +7,6 @@ const vnpayConfig = {
   vnpUrl:
     process.env.VNPAY_URL ||
     "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
-  returnUrl: process.env.VNPAY_RETURN_URL,
   locale: process.env.VNPAY_LOCALE || "vn",
   currCode: "VND",
   version: process.env.VNPAY_VERSION || "2.1.0",
