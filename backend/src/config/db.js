@@ -187,6 +187,64 @@ async function ensureSchema() {
       ALTER TABLE test_choices ADD is_deleted BIT NOT NULL CONSTRAINT DF_test_choices_is_deleted DEFAULT 0;
     END;
   `);
+
+  // Ensure payments table has required columns for VNPay integration
+  await pool.request().query(`
+    IF COL_LENGTH('payments', 'payment_method') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD payment_method NVARCHAR(30) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'txn_ref') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD txn_ref NVARCHAR(100) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'order_info') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD order_info NVARCHAR(255) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'vnp_transaction_no') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD vnp_transaction_no NVARCHAR(50) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'bank_code') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD bank_code NVARCHAR(50) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'bank_tran_no') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD bank_tran_no NVARCHAR(100) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'card_type') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD card_type NVARCHAR(50) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'response_code') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD response_code NVARCHAR(10) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'transaction_status') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD transaction_status NVARCHAR(10) NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'pay_date') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD pay_date DATETIMEOFFSET NULL;
+    END;
+
+    IF COL_LENGTH('payments', 'gateway_response') IS NULL
+    BEGIN
+      ALTER TABLE payments ADD gateway_response NVARCHAR(MAX) NULL;
+    END;
+  `);
 }
 
 module.exports = { sql, pool, poolConnect, getPool, ensureSchema };
