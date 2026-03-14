@@ -1,5 +1,4 @@
-// src/services/payment.service.js
-const { pool, poolConnect, sql } = require("../config/db");
+const supabase = require("../config/supabase");
 const { getCourseById } = require("./course.service");
 const {
   vnpayConfig,
@@ -7,7 +6,7 @@ const {
   signParams,
   verifySecureHash,
   parseVnpPayDate,
-  buildVnpString, // ✅ dùng cái này thay buildQueryString
+  buildVnpString,
 } = require("../config/vnpay");
 
 function getClientIp(req) {
@@ -17,8 +16,8 @@ function getClientIp(req) {
 }
 
 function getBaseUrl(req) {
-  const proto = req.headers['x-forwarded-proto'] || req.protocol;
-  const host = req.get('host');
+  const proto = req.headers["x-forwarded-proto"] || req.protocol;
+  const host = req.get("host");
   return `${proto}://${host}`;
 }
 
@@ -30,51 +29,50 @@ function generateTxnRef() {
 }
 
 async function isEnrolled(studentId, courseId) {
-  await poolConnect;
-  const rs = await pool
-    .request()
-    .input("student_id", sql.UniqueIdentifier, studentId)
-    .input("course_id", sql.UniqueIdentifier, courseId)
-    .query(`
-      SELECT TOP 1 id
-      FROM enrollments
-      WHERE student_id = @student_id AND course_id = @course_id
-    `);
-  return rs.recordset.length > 0;
+  const { data, error } = await supabase
+    .from("enrollments")
+    .select("id")
+    .eq("student_id", studentId)
+    .eq("course_id", courseId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return !!data;
 }
 
-async function createEnrollmentIfNotExists(trxRequest, studentId, courseId) {
-  const exist = await trxRequest
-    .input("student_id", sql.UniqueIdentifier, studentId)
-    .input("course_id", sql.UniqueIdentifier, courseId)
-    .query(`
-      SELECT TOP 1 id
-      FROM enrollments
-      WHERE student_id = @student_id AND course_id = @course_id
-    `);
+async function createEnrollmentIfNotExists(studentId, courseId) {
+  const { data: existing, error: existingError } = await supabase
+    .from("enrollments")
+    .select("id")
+    .eq("student_id", studentId)
+    .eq("course_id", courseId)
+    .limit(1)
+    .maybeSingle();
 
-  if (exist.recordset[0]?.id) return exist.recordset[0].id;
+  if (existingError) throw new Error(existingError.message);
+  if (existing?.id) return existing.id;
 
-  const ins = await trxRequest.query(`
-    INSERT INTO enrollments (student_id, course_id, progress_percent, enrolled_at)
-    OUTPUT INSERTED.id
-    VALUES (@student_id, @course_id, 0, SYSDATETIMEOFFSET())
-  `);
+  const { data: inserted, error: insertError } = await supabase
+    .from("enrollments")
+    .insert({
+      student_id: studentId,
+      course_id: courseId,
+      progress_percent: 0,
+      enrolled_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
 
-  return ins.recordset[0].id;
+  if (insertError) throw new Error(insertError.message);
+  return inserted.id;
 }
 
-/**
- * Student creates VNPay payment URL for a course
- * - If course is free (price=0): enroll directly and return enrolled=true (no VNPay)
- */
 async function createCoursePaymentUrl({ studentId, courseId, req }) {
-  const isDemoMode = process.env.PAYMENT_DEMO === 'true';
+  const isDemoMode = process.env.PAYMENT_DEMO === "true";
 
   if (!isDemoMode && !vnpayConfig.tmnCode) {
-    throw new Error(
-      "Thiếu cấu hình VNPay (VNPAY_TMN_CODE / VNPAY_HASH_SECRET)"
-    );
+    throw new Error("Thiếu cấu hình VNPay (VNPAY_TMN_CODE / VNPAY_HASH_SECRET)");
   }
 
   const course = await getCourseById(courseId);
@@ -89,81 +87,55 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
   }
 
   const price = Number(course.price || 0);
-  if (Number.isNaN(price) || price < 0) throw new Error("Giá khóa học không hợp lệ");
+  if (Number.isNaN(price) || price < 0) {
+    throw new Error("Giá khóa học không hợp lệ");
+  }
 
-  // Free course => enroll directly
   if (price === 0) {
-    await poolConnect;
-    const t = new sql.Transaction(pool);
-    await t.begin();
-    try {
-      const r = new sql.Request(t);
-      const enrollmentId = await createEnrollmentIfNotExists(r, studentId, courseId);
-      await t.commit();
-      return {
-        message: "Khóa học miễn phí - đã đăng ký thành công",
-        data: { enrolled: true, enrollment_id: enrollmentId, course_id: courseId },
-      };
-    } catch (e) {
-      await t.rollback();
-      throw e;
-    }
+    const enrollmentId = await createEnrollmentIfNotExists(studentId, courseId);
+    return {
+      message: "Khóa học miễn phí - đã đăng ký thành công",
+      data: { enrolled: true, enrollment_id: enrollmentId, course_id: courseId },
+    };
   }
 
-  // Demo mode: enroll directly (bypass VNPay)
   if (isDemoMode) {
-    await poolConnect;
-    const t = new sql.Transaction(pool);
-    await t.begin();
-    try {
-      const r = new sql.Request(t);
-      const enrollmentId = await createEnrollmentIfNotExists(r, studentId, courseId);
-      await t.commit();
-      return {
-        message: "Demo mode: đã đăng ký khóa học thành công (bypass VNPay)",
-        data: { enrolled: true, enrollment_id: enrollmentId, course_id: courseId },
-      };
-    } catch (e) {
-      await t.rollback();
-      throw e;
-    }
+    const enrollmentId = await createEnrollmentIfNotExists(studentId, courseId);
+    return {
+      message: "Demo mode: đã đăng ký khóa học thành công (bypass VNPay)",
+      data: { enrolled: true, enrollment_id: enrollmentId, course_id: courseId },
+    };
   }
 
-  // Create payment record PENDING
-  await poolConnect;
   const txnRef = generateTxnRef();
-
-  // VNPay hay bị "Sai chữ ký" nếu OrderInfo có ký tự đặc biệt -> keep simple
   const orderInfo = `Thanh toan khoa hoc ${course.title}`;
 
-  const insert = await pool
-    .request()
-    .input("student_id", sql.UniqueIdentifier, studentId)
-    .input("course_id", sql.UniqueIdentifier, courseId)
-    .input("payment_method", sql.NVarChar(30), "VNPAY")
-    .input("txn_ref", sql.NVarChar(100), txnRef)
-    .input("order_info", sql.NVarChar(255), orderInfo)
-    .input("amount", sql.Decimal(12, 2), price)
-    .query(`
-      INSERT INTO payments
-        (student_id, course_id, enrollment_id, payment_method, txn_ref, order_info, amount, status, created_at)
-      OUTPUT INSERTED.id
-      VALUES
-        (@student_id, @course_id, NULL, @payment_method, @txn_ref, @order_info, @amount, 'PENDING', SYSDATETIMEOFFSET())
-    `);
+  const { data: paymentInsert, error: paymentInsertError } = await supabase
+    .from("payments")
+    .insert({
+      student_id: studentId,
+      course_id: courseId,
+      enrollment_id: null,
+      payment_method: "VNPAY",
+      txn_ref: txnRef,
+      order_info: orderInfo,
+      amount: price,
+      status: "PENDING",
+      created_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
 
-  const paymentId = insert.recordset[0].id;
+  if (paymentInsertError) throw new Error(paymentInsertError.message);
 
-  // Build VNPay URL
+  const paymentId = paymentInsert.id;
   const now = new Date();
   const createDate = formatVnpDate(now);
   const expireDate = formatVnpDate(
     new Date(now.getTime() + vnpayConfig.expireMinutes * 60 * 1000)
   );
 
-  // VNPay amount in VND * 100 (integer)
   const vnpAmount = Math.round(price * 100);
-
   const ipAddr = getClientIp(req);
 
   const vnpParams = {
@@ -182,10 +154,7 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
     vnp_ExpireDate: expireDate,
   };
 
-  // ✅ ký đúng chuẩn VNPay
   const secureHash = signParams(vnpParams, vnpayConfig.hashSecret);
-
-  // ✅ build querystring đúng chuẩn VNPay
   const queryString = buildVnpString({
     ...vnpParams,
     vnp_SecureHash: secureHash,
@@ -205,9 +174,6 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
   };
 }
 
-/**
- * Handle VNPay return (user redirect) or IPN
- */
 async function handleVnpayCallback(vnpParams) {
   if (!verifySecureHash(vnpParams, vnpayConfig.hashSecret)) {
     return { ok: false, message: "Sai chữ ký (vnp_SecureHash)" };
@@ -216,18 +182,14 @@ async function handleVnpayCallback(vnpParams) {
   const txnRef = vnpParams.vnp_TxnRef;
   if (!txnRef) return { ok: false, message: "Thiếu vnp_TxnRef" };
 
-  await poolConnect;
+  const { data: payment, error: paymentError } = await supabase
+    .from("payments")
+    .select("*")
+    .eq("txn_ref", txnRef)
+    .limit(1)
+    .maybeSingle();
 
-  const paymentRs = await pool
-    .request()
-    .input("txn_ref", sql.NVarChar(100), txnRef)
-    .query(`
-      SELECT TOP 1 *
-      FROM payments
-      WHERE txn_ref = @txn_ref
-    `);
-
-  const payment = paymentRs.recordset[0];
+  if (paymentError) throw new Error(paymentError.message);
   if (!payment) return { ok: false, message: "Không tìm thấy payment theo txn_ref" };
 
   const vnpAmount = Number(vnpParams.vnp_Amount);
@@ -254,111 +216,113 @@ async function handleVnpayCallback(vnpParams) {
     };
   }
 
-  const t = new sql.Transaction(pool);
-  await t.begin();
-  try {
-    const r = new sql.Request(t);
+  const payDate = parseVnpPayDate(vnpParams.vnp_PayDate);
+  const gatewayResponse = JSON.stringify(vnpParams);
+  const newStatus = isSuccess
+    ? "SUCCESS"
+    : responseCode === "24"
+      ? "CANCELLED"
+      : "FAILED";
 
-    const payDate = parseVnpPayDate(vnpParams.vnp_PayDate);
-    const gatewayResponse = JSON.stringify(vnpParams);
+  let enrollmentId = payment.enrollment_id;
 
-    const newStatus = isSuccess ? "SUCCESS" : responseCode === "24" ? "CANCELLED" : "FAILED";
-
-    await r
-      .input("id", sql.UniqueIdentifier, payment.id)
-      .input("status", sql.NVarChar(20), newStatus)
-      .input("vnp_transaction_no", sql.NVarChar(50), vnpParams.vnp_TransactionNo || null)
-      .input("bank_code", sql.NVarChar(50), vnpParams.vnp_BankCode || null)
-      .input("bank_tran_no", sql.NVarChar(100), vnpParams.vnp_BankTranNo || null)
-      .input("card_type", sql.NVarChar(50), vnpParams.vnp_CardType || null)
-      .input("response_code", sql.NVarChar(10), responseCode || null)
-      .input("transaction_status", sql.NVarChar(10), transactionStatus || null)
-      .input("pay_date", sql.DateTimeOffset, payDate ? payDate : null)
-      .input("gateway_response", sql.NVarChar(sql.MAX), gatewayResponse)
-      .query(`
-        UPDATE payments
-        SET
-          status = @status,
-          vnp_transaction_no = @vnp_transaction_no,
-          bank_code = @bank_code,
-          bank_tran_no = @bank_tran_no,
-          card_type = @card_type,
-          response_code = @response_code,
-          transaction_status = @transaction_status,
-          pay_date = @pay_date,
-          gateway_response = @gateway_response
-        WHERE id = @id
-      `);
-
-    let enrollmentId = payment.enrollment_id;
-
-    if (isSuccess) {
-      enrollmentId = await createEnrollmentIfNotExists(r, payment.student_id, payment.course_id);
-
-      await r
-        .input("pid", sql.UniqueIdentifier, payment.id)
-        .input("enrollment_id", sql.UniqueIdentifier, enrollmentId)
-        .query(`
-          UPDATE payments
-          SET enrollment_id = @enrollment_id
-          WHERE id = @pid
-        `);
-    }
-
-    await t.commit();
-
-    return {
-      ok: isSuccess,
-      message: isSuccess ? "Thanh toán thành công" : "Thanh toán không thành công",
-      data: {
-        payment_id: payment.id,
-        txn_ref: txnRef,
-        status: newStatus,
-        enrollment_id: enrollmentId,
-        vnp_response_code: responseCode,
-        vnp_transaction_status: transactionStatus,
-      },
-    };
-  } catch (e) {
-    await t.rollback();
-    throw e;
+  if (isSuccess) {
+    enrollmentId = await createEnrollmentIfNotExists(payment.student_id, payment.course_id);
   }
+
+  const { error: updateError } = await supabase
+    .from("payments")
+    .update({
+      status: newStatus,
+      vnp_transaction_no: vnpParams.vnp_TransactionNo || null,
+      bank_code: vnpParams.vnp_BankCode || null,
+      bank_tran_no: vnpParams.vnp_BankTranNo || null,
+      card_type: vnpParams.vnp_CardType || null,
+      response_code: responseCode || null,
+      transaction_status: transactionStatus || null,
+      pay_date: payDate ? new Date(payDate).toISOString() : null,
+      gateway_response: gatewayResponse,
+      enrollment_id: enrollmentId || null,
+    })
+    .eq("id", payment.id);
+
+  if (updateError) throw new Error(updateError.message);
+
+  return {
+    ok: isSuccess,
+    message: isSuccess ? "Thanh toán thành công" : "Thanh toán không thành công",
+    data: {
+      payment_id: payment.id,
+      txn_ref: txnRef,
+      status: newStatus,
+      enrollment_id: enrollmentId,
+      vnp_response_code: responseCode,
+      vnp_transaction_status: transactionStatus,
+    },
+  };
 }
 
 async function getMyPayments(studentId) {
-  await poolConnect;
-  const rs = await pool
-    .request()
-    .input("student_id", sql.UniqueIdentifier, studentId)
-    .query(`
-      SELECT
-        p.id, p.course_id, c.title AS course_title,
-        p.amount, p.status, p.payment_method, p.txn_ref,
-        p.response_code, p.transaction_status, p.bank_code,
-        p.created_at, p.pay_date
-      FROM payments p
-      JOIN courses c ON c.id = p.course_id
-      WHERE p.student_id = @student_id
-      ORDER BY p.created_at DESC
-    `);
-  return rs.recordset;
+  const { data, error } = await supabase
+    .from("payments")
+    .select(`
+      id,
+      course_id,
+      amount,
+      status,
+      payment_method,
+      txn_ref,
+      response_code,
+      transaction_status,
+      bank_code,
+      created_at,
+      pay_date,
+      courses (
+        title
+      )
+    `)
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    course_id: row.course_id,
+    course_title: row.courses?.title || null,
+    amount: row.amount,
+    status: row.status,
+    payment_method: row.payment_method,
+    txn_ref: row.txn_ref,
+    response_code: row.response_code,
+    transaction_status: row.transaction_status,
+    bank_code: row.bank_code,
+    created_at: row.created_at,
+    pay_date: row.pay_date,
+  }));
 }
 
 async function getPaymentDetail(studentId, paymentId) {
-  await poolConnect;
-  const rs = await pool
-    .request()
-    .input("student_id", sql.UniqueIdentifier, studentId)
-    .input("id", sql.UniqueIdentifier, paymentId)
-    .query(`
-      SELECT TOP 1
-        p.*,
-        c.title AS course_title
-      FROM payments p
-      JOIN courses c ON c.id = p.course_id
-      WHERE p.id = @id AND p.student_id = @student_id
-    `);
-  return rs.recordset[0] || null;
+  const { data, error } = await supabase
+    .from("payments")
+    .select(`
+      *,
+      courses (
+        title
+      )
+    `)
+    .eq("id", paymentId)
+    .eq("student_id", studentId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  return {
+    ...data,
+    course_title: data.courses?.title || null,
+  };
 }
 
 module.exports = {

@@ -1,96 +1,133 @@
-const { sql, getPool } = require("../config/db");
+const supabase = require("../config/supabase");
+
+async function getRoleIdByCode(roleCode) {
+  const { data, error } = await supabase
+    .from("roles")
+    .select("id, code")
+    .eq("code", String(roleCode).toUpperCase())
+    .single();
+
+  if (error || !data) {
+    throw new Error("Role không tồn tại");
+  }
+
+  return data.id;
+}
+
+function normalizeUser(row) {
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    phone: row.phone,
+    role_id: row.role_id,
+    role_code: row.roles?.code || null,
+    is_verified: row.is_verified,
+    is_active: row.is_active,
+    is_deleted: row.is_deleted,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
 
 async function getUserById(userId) {
-  const pool = await getPool();
-  const rs = await pool
-    .request()
-    .input("id", sql.UniqueIdentifier, userId)
-    .query(`
-      SELECT 
-        u.id,
-        u.email,
-        u.full_name,
-        u.phone,
-        u.role_id,
-        r.code AS role_code,
-        u.is_verified,
-        u.is_active,
-        u.is_deleted,
-        u.created_at,
-        u.updated_at
-      FROM users u
-      JOIN roles r ON r.id = u.role_id
-      WHERE u.id = @id AND u.is_deleted = 0
-    `);
-  return rs.recordset[0] || null;
+  const { data, error } = await supabase
+    .from("users")
+    .select(`
+      id,
+      email,
+      full_name,
+      phone,
+      role_id,
+      is_verified,
+      is_active,
+      is_deleted,
+      created_at,
+      updated_at,
+      roles!users_role_id_fkey (
+        code
+      )
+    `)
+    .eq("id", userId)
+    .eq("is_deleted", false)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    throw new Error(error.message);
+  }
+
+  return normalizeUser(data);
 }
 
 async function getAllUsers() {
-  const pool = await getPool();
-  const rs = await pool.request().query(`
-    SELECT 
-      u.id,
-      u.email,
-      u.full_name,
-      u.phone,
-      u.role_id,
-      r.code AS role_code,
-      u.is_verified,
-      u.is_active,
-      u.is_deleted,
-      u.created_at,
-      u.updated_at
-    FROM users u
-    JOIN roles r ON r.id = u.role_id
-    ORDER BY u.created_at DESC
-  `);
-  return rs.recordset;
+  const { data, error } = await supabase
+    .from("users")
+    .select(`
+      id,
+      email,
+      full_name,
+      phone,
+      role_id,
+      is_verified,
+      is_active,
+      is_deleted,
+      created_at,
+      updated_at,
+      roles!users_role_id_fkey (
+        code
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data || []).map(normalizeUser);
 }
 
-const ROLE_IDS = { ADMIN: 1, TEACHER: 2, STUDENT: 3, GUEST: 4 };
-
 async function changeRole(userId, newRoleCode) {
-  const pool = await getPool();
-  const roleId = ROLE_IDS[String(newRoleCode).toUpperCase()];
-  if (!roleId || (roleId !== 2 && roleId !== 3)) {
+  const roleCode = String(newRoleCode).toUpperCase();
+  if (!["TEACHER", "STUDENT"].includes(roleCode)) {
     throw new Error("Chỉ được chuyển vai trò thành TEACHER hoặc STUDENT");
   }
 
-  const rs = await pool
-    .request()
-    .input("id", sql.UniqueIdentifier, userId)
-    .input("role_id", sql.SmallInt, roleId)
-    .query(`
-      UPDATE users
-      SET role_id = @role_id,
-          updated_at = SYSDATETIMEOFFSET()
-      WHERE id = @id AND is_deleted = 0 AND role_id IN (2, 3);
+  const roleId = await getRoleIdByCode(roleCode);
 
-      IF @@ROWCOUNT = 0
-        THROW 50001, 'User not found or cannot change role (Admin cannot be changed)', 1;
+  const { data: currentUser, error: currentError } = await supabase
+    .from("users")
+    .select(`
+      id,
+      role_id,
+      is_deleted,
+      roles!users_role_id_fkey (
+        code
+      )
+    `)
+    .eq("id", userId)
+    .eq("is_deleted", false)
+    .single();
 
-      SELECT 
-        u.id,
-        u.email,
-        u.full_name,
-        u.phone,
-        u.role_id,
-        r.code AS role_code,
-        u.is_verified,
-        u.is_active,
-        u.is_deleted,
-        u.created_at,
-        u.updated_at
-      FROM users u
-      JOIN roles r ON r.id = u.role_id
-      WHERE u.id = @id;
-    `);
-
-  const user = (rs.recordsets?.[1] || rs.recordset || [])[0];
-  if (!user) {
+  if (currentError || !currentUser) {
     throw new Error("User not found or cannot change role");
   }
-  return user;
+
+  if (currentUser.roles?.code === "ADMIN") {
+    throw new Error("User not found or cannot change role (Admin cannot be changed)");
+  }
+
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({
+      role_id: roleId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .eq("is_deleted", false);
+
+  if (updateError) throw new Error(updateError.message);
+
+  return getUserById(userId);
 }
 
 async function promoteToTeacher(userId) {
@@ -98,42 +135,30 @@ async function promoteToTeacher(userId) {
 }
 
 async function softDeleteUser(userId) {
-  const pool = await getPool();
+  const { data: exists, error: existsError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("id", userId)
+    .eq("is_deleted", false)
+    .single();
 
-  const rs = await pool
-    .request()
-    .input("id", sql.UniqueIdentifier, userId)
-    .query(`
-      UPDATE users
-      SET 
-        is_active = 0,
-        is_deleted = 1,
-        updated_at = SYSDATETIMEOFFSET()
-      WHERE id = @id AND is_deleted = 0;
-
-      SELECT 
-        u.id,
-        u.email,
-        u.full_name,
-        u.phone,
-        u.role_id,
-        r.code AS role_code,
-        u.is_verified,
-        u.is_active,
-        u.is_deleted,
-        u.created_at,
-        u.updated_at
-      FROM users u
-      JOIN roles r ON r.id = u.role_id
-      WHERE u.id = @id;
-    `);
-
-  const rows = rs.recordsets?.[1] || rs.recordset || [];
-  const user = rows[0];
-  if (!user) {
+  if (existsError || !exists) {
     throw new Error("User not found or already deleted");
   }
-  return user;
+
+  const { error } = await supabase
+    .from("users")
+    .update({
+      is_active: false,
+      is_deleted: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .eq("is_deleted", false);
+
+  if (error) throw new Error(error.message);
+
+  return getUserById(userId);
 }
 
 module.exports = {
@@ -143,4 +168,3 @@ module.exports = {
   changeRole,
   softDeleteUser,
 };
-

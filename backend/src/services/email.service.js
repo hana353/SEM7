@@ -12,6 +12,14 @@ const transporter = nodemailer.createTransport({
 });
 
 async function sendOtpEmail(to, otp, type = "register") {
+  if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
+    throw new Error("MAIL_USER hoặc MAIL_PASS chưa được cấu hình");
+  }
+
+  if (!to) {
+    throw new Error("Thiếu email người nhận");
+  }
+
   const subject =
     type === "login" ? "Your Login OTP Code" : "Your Registration OTP Code";
 

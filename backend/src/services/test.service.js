@@ -1,5 +1,4 @@
-// src/services/test.service.js
-const { pool, poolConnect, sql } = require("../config/db");
+const supabase = require("../config/supabase");
 
 const ALLOWED_STATUS = new Set(["DRAFT", "PUBLISHED", "CLOSED"]);
 
@@ -13,362 +12,421 @@ function normalizeStatus(v) {
 }
 
 async function assertTestOwnedByTeacher(teacherId, testId) {
-  await poolConnect;
-  const rs = await pool
-    .request()
-    .input("teacher_id", sql.UniqueIdentifier, teacherId)
-    .input("id", sql.UniqueIdentifier, testId)
-    .query(`
-      SELECT id
-      FROM tests
-      WHERE id = @id AND teacher_id = @teacher_id AND is_deleted = 0
-    `);
+  const { data, error } = await supabase
+    .from("tests")
+    .select("id")
+    .eq("id", testId)
+    .eq("teacher_id", teacherId)
+    .eq("is_deleted", false)
+    .single();
 
-  if (rs.recordset.length === 0) {
+  if (error || !data) {
     throw new Error("Bài kiểm tra không tồn tại hoặc không thuộc quyền TEACHER");
   }
 }
 
 async function assertQuestionOwnedByTeacher(teacherId, questionId) {
-  await poolConnect;
-  const rs = await pool
-    .request()
-    .input("teacher_id", sql.UniqueIdentifier, teacherId)
-    .input("question_id", sql.UniqueIdentifier, questionId)
-    .query(`
-      SELECT q.id, q.test_id
-      FROM test_questions q
-      JOIN tests t ON t.id = q.test_id
-      WHERE q.id = @question_id
-        AND q.is_deleted = 0
-        AND t.is_deleted = 0
-        AND t.teacher_id = @teacher_id
-    `);
+  const { data, error } = await supabase
+    .from("test_questions")
+    .select(`
+      id,
+      test_id,
+      tests!inner (
+        id,
+        teacher_id,
+        is_deleted
+      )
+    `)
+    .eq("id", questionId)
+    .eq("is_deleted", false)
+    .eq("tests.teacher_id", teacherId)
+    .eq("tests.is_deleted", false)
+    .single();
 
-  if (rs.recordset.length === 0) {
+  if (error || !data) {
     throw new Error("Question không tồn tại hoặc không thuộc quyền TEACHER");
   }
 
-  return rs.recordset[0].test_id;
+  return data.test_id;
 }
 
 async function assertChoiceOwnedByTeacher(teacherId, choiceId) {
-  await poolConnect;
-  const rs = await pool
-    .request()
-    .input("teacher_id", sql.UniqueIdentifier, teacherId)
-    .input("choice_id", sql.UniqueIdentifier, choiceId)
-    .query(`
-      SELECT c.id, q.id AS question_id, q.test_id
-      FROM test_choices c
-      JOIN test_questions q ON q.id = c.question_id
-      JOIN tests t ON t.id = q.test_id
-      WHERE c.id = @choice_id
-        AND c.is_deleted = 0
-        AND q.is_deleted = 0
-        AND t.is_deleted = 0
-        AND t.teacher_id = @teacher_id
-    `);
+  const { data, error } = await supabase
+    .from("test_choices")
+    .select(`
+      id,
+      question_id,
+      test_questions!inner (
+        id,
+        test_id,
+        is_deleted,
+        tests!inner (
+          id,
+          teacher_id,
+          is_deleted
+        )
+      )
+    `)
+    .eq("id", choiceId)
+    .eq("is_deleted", false)
+    .eq("test_questions.is_deleted", false)
+    .eq("test_questions.tests.teacher_id", teacherId)
+    .eq("test_questions.tests.is_deleted", false)
+    .single();
 
-  if (rs.recordset.length === 0) {
+  if (error || !data) {
     throw new Error("Choice không tồn tại hoặc không thuộc quyền TEACHER");
   }
 
-  return rs.recordset[0];
+  return {
+    question_id: data.question_id,
+    test_id: data.test_questions?.test_id || null,
+  };
 }
 
 async function assertAttemptOwnedByStudent(studentId, attemptId) {
-  await poolConnect;
-  const rs = await pool
-    .request()
-    .input("student_id", sql.UniqueIdentifier, studentId)
-    .input("attempt_id", sql.UniqueIdentifier, attemptId)
-    .query(`
-      SELECT a.*, t.title, t.description, t.duration_minutes, t.status AS test_status
-      FROM test_attempts a
-      JOIN tests t ON t.id = a.test_id
-      WHERE a.id = @attempt_id
-        AND a.student_id = @student_id
-        AND t.is_deleted = 0
-    `);
+  const { data, error } = await supabase
+    .from("test_attempts")
+    .select(`
+      *,
+      tests!inner (
+        title,
+        description,
+        duration_minutes,
+        status,
+        is_deleted
+      )
+    `)
+    .eq("id", attemptId)
+    .eq("student_id", studentId)
+    .eq("tests.is_deleted", false)
+    .single();
 
-  if (rs.recordset.length === 0) {
+  if (error || !data) {
     throw new Error("Attempt không tồn tại hoặc không thuộc về STUDENT");
   }
 
-  return rs.recordset[0];
+  return {
+    ...data,
+    title: data.tests?.title,
+    description: data.tests?.description,
+    duration_minutes: data.tests?.duration_minutes,
+    test_status: data.tests?.status,
+  };
+}
+
+async function getQuestionsWithChoices(testId, includeCorrect = false) {
+  const { data: questions, error: qError } = await supabase
+    .from("test_questions")
+    .select("id, test_id, question_text, points, position, created_at, updated_at")
+    .eq("test_id", testId)
+    .eq("is_deleted", false)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (qError) throw new Error(qError.message);
+
+  const result = [];
+  for (const q of questions || []) {
+    let choiceQuery = supabase
+      .from("test_choices")
+      .select(
+        includeCorrect
+          ? "id, question_id, choice_text, is_correct, position"
+          : "id, question_id, choice_text, position"
+      )
+      .eq("question_id", q.id)
+      .eq("is_deleted", false)
+      .order("position", { ascending: true })
+      .order("id", { ascending: true });
+
+    const { data: choices, error: cError } = await choiceQuery;
+    if (cError) throw new Error(cError.message);
+
+    result.push({
+      ...q,
+      choices: choices || [],
+    });
+  }
+
+  return result;
 }
 
 module.exports = {
-  /* =========================
-     PUBLIC
-  ========================= */
   async publicListPublished({ courseId }) {
-    await poolConnect;
-    const rs = await pool
-      .request()
-      .input("course_id", sql.UniqueIdentifier, courseId)
-      .query(`
-        SELECT id, teacher_id, course_id, title, description,
-               duration_minutes, max_attempts, shuffle_questions, shuffle_choices,
-               status, open_at, close_at, created_at, updated_at
-        FROM tests
-        WHERE is_deleted = 0
-          AND status = 'PUBLISHED'
-          AND (@course_id IS NULL OR course_id = @course_id)
-        ORDER BY updated_at DESC
-      `);
-    return rs.recordset;
+    let query = supabase
+      .from("tests")
+      .select(`
+        id,
+        teacher_id,
+        course_id,
+        title,
+        description,
+        duration_minutes,
+        max_attempts,
+        shuffle_questions,
+        shuffle_choices,
+        status,
+        open_at,
+        close_at,
+        created_at,
+        updated_at
+      `)
+      .eq("is_deleted", false)
+      .eq("status", "PUBLISHED")
+      .order("updated_at", { ascending: false });
+
+    if (courseId) query = query.eq("course_id", courseId);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
   async publicGetPublishedDetail(testId) {
-    await poolConnect;
+    const { data, error } = await supabase
+      .from("tests")
+      .select(`
+        id,
+        teacher_id,
+        course_id,
+        title,
+        description,
+        duration_minutes,
+        max_attempts,
+        shuffle_questions,
+        shuffle_choices,
+        status,
+        open_at,
+        close_at,
+        created_at,
+        updated_at
+      `)
+      .eq("id", testId)
+      .eq("is_deleted", false)
+      .eq("status", "PUBLISHED")
+      .single();
 
-    const rs = await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, testId)
-      .query(`
-        SELECT id, teacher_id, course_id, title, description,
-               duration_minutes, max_attempts, shuffle_questions, shuffle_choices,
-               status, open_at, close_at, created_at, updated_at
-        FROM tests
-        WHERE id = @id AND is_deleted = 0 AND status = 'PUBLISHED'
-      `);
-
-    if (rs.recordset.length === 0) {
+    if (error || !data) {
       throw new Error("Bài kiểm tra không tồn tại hoặc chưa publish");
     }
 
-    return rs.recordset[0];
+    return data;
   },
 
-  /* =========================
-     TEACHER: TEST
-  ========================= */
   async teacherCreateTest(teacherId, payload) {
-    await poolConnect;
-
     const title = String(payload.title || "").trim();
     if (!title) throw new Error("title là bắt buộc");
     if (!payload.course_id) throw new Error("course_id là bắt buộc");
 
-    const c = await pool.request()
-      .input("course_id", sql.UniqueIdentifier, payload.course_id)
-      .input("teacher_id", sql.UniqueIdentifier, teacherId)
-      .query(`SELECT id FROM courses WHERE id = @course_id AND teacher_id = @teacher_id AND (status IS NULL OR status <> 'DELETED')`);
-    if (c.recordset.length === 0) throw new Error("Khóa học không tồn tại hoặc không được gán cho giáo viên này");
+    const { data: course, error: cError } = await supabase
+      .from("courses")
+      .select("id")
+      .eq("id", payload.course_id)
+      .eq("teacher_id", teacherId)
+      .neq("status", "DELETED")
+      .single();
+
+    if (cError || !course) {
+      throw new Error("Khóa học không tồn tại hoặc không được gán cho giáo viên này");
+    }
 
     const status = normalizeStatus(payload.status || "DRAFT");
 
-    const rs = await pool
-      .request()
-      .input("teacher_id", sql.UniqueIdentifier, teacherId)
-      .input("course_id", sql.UniqueIdentifier, payload.course_id)
-      .input("title", sql.NVarChar(255), title)
-      .input("description", sql.NVarChar(sql.MAX), payload.description ?? null)
-      .input("duration_minutes", sql.Int, payload.duration_minutes ?? null)
-      .input("max_attempts", sql.Int, payload.max_attempts ?? null)
-      .input("shuffle_questions", sql.Bit, payload.shuffle_questions ?? false)
-      .input("shuffle_choices", sql.Bit, payload.shuffle_choices ?? false)
-      .input("status", sql.NVarChar(20), status)
-      .input("open_at", sql.DateTimeOffset, payload.open_at ?? null)
-      .input("close_at", sql.DateTimeOffset, payload.close_at ?? null)
-      .query(`
-        INSERT INTO tests (
-          teacher_id, course_id, title, description,
-          duration_minutes, max_attempts,
-          shuffle_questions, shuffle_choices,
-          status, open_at, close_at,
-          is_deleted, created_at, updated_at
-        )
-        OUTPUT INSERTED.*
-        VALUES (
-          @teacher_id, @course_id, @title, @description,
-          @duration_minutes, @max_attempts,
-          @shuffle_questions, @shuffle_choices,
-          @status, @open_at, @close_at,
-          0, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET()
-        )
-      `);
+    const { data, error } = await supabase
+      .from("tests")
+      .insert({
+        teacher_id: teacherId,
+        course_id: payload.course_id,
+        title,
+        description: payload.description ?? null,
+        duration_minutes: payload.duration_minutes ?? null,
+        max_attempts: payload.max_attempts ?? null,
+        shuffle_questions: payload.shuffle_questions ?? false,
+        shuffle_choices: payload.shuffle_choices ?? false,
+        status,
+        open_at: payload.open_at ?? null,
+        close_at: payload.close_at ?? null,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
 
-    return rs.recordset[0];
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async teacherListTests(teacherId, { courseId, status }) {
-    await poolConnect;
     const st = status ? normalizeStatus(status) : null;
 
-    const rs = await pool
-      .request()
-      .input("teacher_id", sql.UniqueIdentifier, teacherId)
-      .input("course_id", sql.UniqueIdentifier, courseId)
-      .input("status", sql.NVarChar(20), st)
-      .query(`
-        SELECT id, teacher_id, course_id, title, description,
-               duration_minutes, max_attempts, shuffle_questions, shuffle_choices,
-               status, open_at, close_at, created_at, updated_at
-        FROM tests
-        WHERE teacher_id = @teacher_id
-          AND is_deleted = 0
-          AND (@course_id IS NULL OR course_id = @course_id)
-          AND (@status IS NULL OR status = @status)
-        ORDER BY updated_at DESC
-      `);
+    let query = supabase
+      .from("tests")
+      .select(`
+        id,
+        teacher_id,
+        course_id,
+        title,
+        description,
+        duration_minutes,
+        max_attempts,
+        shuffle_questions,
+        shuffle_choices,
+        status,
+        open_at,
+        close_at,
+        created_at,
+        updated_at
+      `)
+      .eq("teacher_id", teacherId)
+      .eq("is_deleted", false)
+      .order("updated_at", { ascending: false });
 
-    return rs.recordset;
+    if (courseId) query = query.eq("course_id", courseId);
+    if (st) query = query.eq("status", st);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
   async teacherGetTestDetail(teacherId, testId) {
-    await poolConnect;
     await assertTestOwnedByTeacher(teacherId, testId);
 
-    const testRs = await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, testId)
-      .query(`
-        SELECT id, teacher_id, course_id, title, description,
-               duration_minutes, max_attempts, shuffle_questions, shuffle_choices,
-               status, open_at, close_at, created_at, updated_at
-        FROM tests
-        WHERE id = @id AND is_deleted = 0
-      `);
+    const { data: test, error: testError } = await supabase
+      .from("tests")
+      .select(`
+        id,
+        teacher_id,
+        course_id,
+        title,
+        description,
+        duration_minutes,
+        max_attempts,
+        shuffle_questions,
+        shuffle_choices,
+        status,
+        open_at,
+        close_at,
+        created_at,
+        updated_at
+      `)
+      .eq("id", testId)
+      .eq("is_deleted", false)
+      .single();
 
-    const questionsRs = await pool
-      .request()
-      .input("test_id", sql.UniqueIdentifier, testId)
-      .query(`
-        SELECT id, test_id, question_text, points, position, created_at, updated_at
-        FROM test_questions
-        WHERE test_id = @test_id AND is_deleted = 0
-        ORDER BY position ASC, created_at ASC
-      `);
+    if (testError) throw new Error(testError.message);
 
-    const questions = [];
-    for (const q of questionsRs.recordset) {
-      const choicesRs = await pool
-        .request()
-        .input("question_id", sql.UniqueIdentifier, q.id)
-        .query(`
-          SELECT id, question_id, choice_text, is_correct, position
-          FROM test_choices
-          WHERE question_id = @question_id AND is_deleted = 0
-          ORDER BY position ASC, id ASC
-        `);
-
-      questions.push({
-        ...q,
-        choices: choicesRs.recordset,
-      });
-    }
+    const questions = await getQuestionsWithChoices(testId, true);
 
     return {
-      ...testRs.recordset[0],
+      ...test,
       questions,
     };
   },
 
   async teacherListTestAttempts(teacherId, testId) {
-    await poolConnect;
     await assertTestOwnedByTeacher(teacherId, testId);
 
-    const rs = await pool
-      .request()
-      .input("test_id", sql.UniqueIdentifier, testId)
-      .query(`
-        SELECT a.id, a.student_id, a.started_at, a.submitted_at, a.status, a.score, a.max_score,
-               u.full_name AS student_name, u.email AS student_email
-        FROM test_attempts a
-        JOIN users u ON u.id = a.student_id
-        WHERE a.test_id = @test_id
-        ORDER BY a.submitted_at DESC, a.started_at DESC
-      `);
+    const { data, error } = await supabase
+      .from("test_attempts")
+      .select(`
+        id,
+        student_id,
+        started_at,
+        submitted_at,
+        status,
+        score,
+        max_score,
+        users!test_attempts_student_id_fkey (
+          full_name,
+          email
+        )
+      `)
+      .eq("test_id", testId)
+      .order("submitted_at", { ascending: false })
+      .order("started_at", { ascending: false });
 
-    return rs.recordset || [];
+    if (error) throw new Error(error.message);
+
+    return (data || []).map((a) => ({
+      id: a.id,
+      student_id: a.student_id,
+      started_at: a.started_at,
+      submitted_at: a.submitted_at,
+      status: a.status,
+      score: a.score,
+      max_score: a.max_score,
+      student_name: a.users?.full_name || null,
+      student_email: a.users?.email || null,
+    }));
   },
 
   async teacherUpdateTest(teacherId, testId, payload) {
-    await poolConnect;
     await assertTestOwnedByTeacher(teacherId, testId);
 
-    const fields = [];
-    const req = pool.request().input("id", sql.UniqueIdentifier, testId);
+    const updates = {
+      updated_at: new Date().toISOString(),
+    };
 
     if (payload.course_id !== undefined) {
-      req.input("course_id", sql.UniqueIdentifier, payload.course_id);
-      fields.push("course_id = @course_id");
+      const { data: course, error: cError } = await supabase
+        .from("courses")
+        .select("id")
+        .eq("id", payload.course_id)
+        .eq("teacher_id", teacherId)
+        .neq("status", "DELETED")
+        .single();
+
+      if (cError || !course) {
+        throw new Error("Khóa học không tồn tại hoặc không được gán cho giáo viên này");
+      }
+      updates.course_id = payload.course_id;
     }
+
     if (payload.title !== undefined) {
       const title = String(payload.title || "").trim();
       if (!title) throw new Error("title không được rỗng");
-      req.input("title", sql.NVarChar(255), title);
-      fields.push("title = @title");
+      updates.title = title;
     }
-    if (payload.description !== undefined) {
-      req.input("description", sql.NVarChar(sql.MAX), payload.description ?? null);
-      fields.push("description = @description");
-    }
-    if (payload.duration_minutes !== undefined) {
-      req.input("duration_minutes", sql.Int, payload.duration_minutes ?? null);
-      fields.push("duration_minutes = @duration_minutes");
-    }
-    if (payload.max_attempts !== undefined) {
-      req.input("max_attempts", sql.Int, payload.max_attempts ?? null);
-      fields.push("max_attempts = @max_attempts");
-    }
-    if (payload.shuffle_questions !== undefined) {
-      req.input("shuffle_questions", sql.Bit, payload.shuffle_questions);
-      fields.push("shuffle_questions = @shuffle_questions");
-    }
-    if (payload.shuffle_choices !== undefined) {
-      req.input("shuffle_choices", sql.Bit, payload.shuffle_choices);
-      fields.push("shuffle_choices = @shuffle_choices");
-    }
-    if (payload.status !== undefined) {
-      const st = normalizeStatus(payload.status);
-      req.input("status", sql.NVarChar(20), st);
-      fields.push("status = @status");
-    }
-    if (payload.open_at !== undefined) {
-      req.input("open_at", sql.DateTimeOffset, payload.open_at ?? null);
-      fields.push("open_at = @open_at");
-    }
-    if (payload.close_at !== undefined) {
-      req.input("close_at", sql.DateTimeOffset, payload.close_at ?? null);
-      fields.push("close_at = @close_at");
-    }
+    if (payload.description !== undefined) updates.description = payload.description ?? null;
+    if (payload.duration_minutes !== undefined) updates.duration_minutes = payload.duration_minutes ?? null;
+    if (payload.max_attempts !== undefined) updates.max_attempts = payload.max_attempts ?? null;
+    if (payload.shuffle_questions !== undefined) updates.shuffle_questions = !!payload.shuffle_questions;
+    if (payload.shuffle_choices !== undefined) updates.shuffle_choices = !!payload.shuffle_choices;
+    if (payload.status !== undefined) updates.status = normalizeStatus(payload.status);
+    if (payload.open_at !== undefined) updates.open_at = payload.open_at ?? null;
+    if (payload.close_at !== undefined) updates.close_at = payload.close_at ?? null;
 
-    if (fields.length === 0) throw new Error("Không có dữ liệu để cập nhật");
+    const { data, error } = await supabase
+      .from("tests")
+      .update(updates)
+      .eq("id", testId)
+      .eq("is_deleted", false)
+      .select("*")
+      .single();
 
-    const rs = await req.query(`
-      UPDATE tests
-      SET ${fields.join(", ")},
-          updated_at = SYSDATETIMEOFFSET()
-      OUTPUT INSERTED.*
-      WHERE id = @id AND is_deleted = 0
-    `);
-
-    return rs.recordset[0];
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async teacherDeleteTest(teacherId, testId) {
-    await poolConnect;
     await assertTestOwnedByTeacher(teacherId, testId);
 
-    await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, testId)
-      .query(`
-        UPDATE tests
-        SET is_deleted = 1, updated_at = SYSDATETIMEOFFSET()
-        WHERE id = @id AND is_deleted = 0
-      `);
+    const { error } = await supabase
+      .from("tests")
+      .update({
+        is_deleted: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", testId)
+      .eq("is_deleted", false);
+
+    if (error) throw new Error(error.message);
   },
 
-  /* =========================
-     TEACHER: QUESTIONS
-  ========================= */
   async teacherAddQuestion(teacherId, testId, payload) {
-    await poolConnect;
     await assertTestOwnedByTeacher(teacherId, testId);
 
     const questionText = String(payload.question_text || "").trim();
@@ -376,111 +434,93 @@ module.exports = {
 
     let position = payload.position;
     if (position === undefined || position === null || Number.isNaN(Number(position))) {
-      const mx = await pool
-        .request()
-        .input("test_id", sql.UniqueIdentifier, testId)
-        .query(`
-          SELECT ISNULL(MAX(position), -1) AS max_pos
-          FROM test_questions
-          WHERE test_id = @test_id AND is_deleted = 0
-        `);
-      position = Number(mx.recordset[0].max_pos) + 1;
+      const { data: mx, error: mxError } = await supabase
+        .from("test_questions")
+        .select("position")
+        .eq("test_id", testId)
+        .eq("is_deleted", false)
+        .order("position", { ascending: false })
+        .limit(1);
+
+      if (mxError) throw new Error(mxError.message);
+      position = mx?.length ? Number(mx[0].position || 0) + 1 : 0;
     } else {
       position = Number(position);
     }
 
-    const rs = await pool
-      .request()
-      .input("test_id", sql.UniqueIdentifier, testId)
-      .input("question_text", sql.NVarChar(sql.MAX), questionText)
-      .input("points", sql.Decimal(6, 2), payload.points ?? 1)
-      .input("position", sql.Int, position)
-      .query(`
-        INSERT INTO test_questions (
-          test_id, question_text, points, position,
-          is_deleted, created_at, updated_at
-        )
-        OUTPUT INSERTED.*
-        VALUES (
-          @test_id, @question_text, @points, @position,
-          0, SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET()
-        )
-      `);
+    const { data, error } = await supabase
+      .from("test_questions")
+      .insert({
+        test_id: testId,
+        question_text: questionText,
+        points: payload.points ?? 1,
+        position,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
 
-    return rs.recordset[0];
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async teacherUpdateQuestion(teacherId, questionId, payload) {
-    await poolConnect;
     await assertQuestionOwnedByTeacher(teacherId, questionId);
 
-    const fields = [];
-    const req = pool.request().input("id", sql.UniqueIdentifier, questionId);
+    const updates = {
+      updated_at: new Date().toISOString(),
+    };
 
     if (payload.question_text !== undefined) {
       const text = String(payload.question_text || "").trim();
       if (!text) throw new Error("question_text không được rỗng");
-      req.input("question_text", sql.NVarChar(sql.MAX), text);
-      fields.push("question_text = @question_text");
+      updates.question_text = text;
     }
-    if (payload.points !== undefined) {
-      req.input("points", sql.Decimal(6, 2), payload.points);
-      fields.push("points = @points");
-    }
-    if (payload.position !== undefined) {
-      req.input("position", sql.Int, payload.position);
-      fields.push("position = @position");
-    }
+    if (payload.points !== undefined) updates.points = payload.points;
+    if (payload.position !== undefined) updates.position = payload.position;
 
-    if (fields.length === 0) throw new Error("Không có dữ liệu để cập nhật");
+    const { data, error } = await supabase
+      .from("test_questions")
+      .update(updates)
+      .eq("id", questionId)
+      .eq("is_deleted", false)
+      .select("*")
+      .single();
 
-    const rs = await req.query(`
-      UPDATE test_questions
-      SET ${fields.join(", ")},
-          updated_at = SYSDATETIMEOFFSET()
-      OUTPUT INSERTED.*
-      WHERE id = @id AND is_deleted = 0
-    `);
-
-    return rs.recordset[0];
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async teacherDeleteQuestion(teacherId, questionId) {
-    await poolConnect;
     await assertQuestionOwnedByTeacher(teacherId, questionId);
 
-    const tx = new sql.Transaction(pool);
-    await tx.begin();
+    const now = new Date().toISOString();
 
-    try {
-      await new sql.Request(tx)
-        .input("id", sql.UniqueIdentifier, questionId)
-        .query(`
-          UPDATE test_questions
-          SET is_deleted = 1, updated_at = SYSDATETIMEOFFSET()
-          WHERE id = @id AND is_deleted = 0
-        `);
+    const { error: qError } = await supabase
+      .from("test_questions")
+      .update({
+        is_deleted: true,
+        updated_at: now,
+      })
+      .eq("id", questionId)
+      .eq("is_deleted", false);
 
-      await new sql.Request(tx)
-        .input("question_id", sql.UniqueIdentifier, questionId)
-        .query(`
-          UPDATE test_choices
-          SET is_deleted = 1
-          WHERE question_id = @question_id AND is_deleted = 0
-        `);
+    if (qError) throw new Error(qError.message);
 
-      await tx.commit();
-    } catch (e) {
-      await tx.rollback();
-      throw e;
-    }
+    const { error: cError } = await supabase
+      .from("test_choices")
+      .update({
+        is_deleted: true,
+      })
+      .eq("question_id", questionId)
+      .eq("is_deleted", false);
+
+    if (cError) throw new Error(cError.message);
   },
 
-  /* =========================
-     TEACHER: CHOICES
-  ========================= */
   async teacherAddChoice(teacherId, questionId, payload) {
-    await poolConnect;
     await assertQuestionOwnedByTeacher(teacherId, questionId);
 
     const text = String(payload.choice_text || "").trim();
@@ -488,196 +528,152 @@ module.exports = {
 
     let position = payload.position;
     if (position === undefined || position === null || Number.isNaN(Number(position))) {
-      const mx = await pool
-        .request()
-        .input("question_id", sql.UniqueIdentifier, questionId)
-        .query(`
-          SELECT ISNULL(MAX(position), -1) AS max_pos
-          FROM test_choices
-          WHERE question_id = @question_id AND is_deleted = 0
-        `);
-      position = Number(mx.recordset[0].max_pos) + 1;
+      const { data: mx, error: mxError } = await supabase
+        .from("test_choices")
+        .select("position")
+        .eq("question_id", questionId)
+        .eq("is_deleted", false)
+        .order("position", { ascending: false })
+        .limit(1);
+
+      if (mxError) throw new Error(mxError.message);
+      position = mx?.length ? Number(mx[0].position || 0) + 1 : 0;
     } else {
       position = Number(position);
     }
 
-    const rs = await pool
-      .request()
-      .input("question_id", sql.UniqueIdentifier, questionId)
-      .input("choice_text", sql.NVarChar(sql.MAX), text)
-      .input("is_correct", sql.Bit, payload.is_correct ?? false)
-      .input("position", sql.Int, position)
-      .query(`
-        INSERT INTO test_choices (
-          question_id, choice_text, is_correct, position, is_deleted
-        )
-        OUTPUT INSERTED.*
-        VALUES (
-          @question_id, @choice_text, @is_correct, @position, 0
-        )
-      `);
+    const { data, error } = await supabase
+      .from("test_choices")
+      .insert({
+        question_id: questionId,
+        choice_text: text,
+        is_correct: payload.is_correct ?? false,
+        position,
+        is_deleted: false,
+      })
+      .select("*")
+      .single();
 
-    return rs.recordset[0];
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async teacherUpdateChoice(teacherId, choiceId, payload) {
-    await poolConnect;
     await assertChoiceOwnedByTeacher(teacherId, choiceId);
 
-    const fields = [];
-    const req = pool.request().input("id", sql.UniqueIdentifier, choiceId);
+    const updates = {};
 
     if (payload.choice_text !== undefined) {
       const text = String(payload.choice_text || "").trim();
       if (!text) throw new Error("choice_text không được rỗng");
-      req.input("choice_text", sql.NVarChar(sql.MAX), text);
-      fields.push("choice_text = @choice_text");
+      updates.choice_text = text;
     }
-    if (payload.is_correct !== undefined) {
-      req.input("is_correct", sql.Bit, payload.is_correct);
-      fields.push("is_correct = @is_correct");
-    }
-    if (payload.position !== undefined) {
-      req.input("position", sql.Int, payload.position);
-      fields.push("position = @position");
-    }
+    if (payload.is_correct !== undefined) updates.is_correct = !!payload.is_correct;
+    if (payload.position !== undefined) updates.position = payload.position;
 
-    if (fields.length === 0) throw new Error("Không có dữ liệu để cập nhật");
+    const { data, error } = await supabase
+      .from("test_choices")
+      .update(updates)
+      .eq("id", choiceId)
+      .eq("is_deleted", false)
+      .select("*")
+      .single();
 
-    const rs = await req.query(`
-      UPDATE test_choices
-      SET ${fields.join(", ")}
-      OUTPUT INSERTED.*
-      WHERE id = @id AND is_deleted = 0
-    `);
-
-    return rs.recordset[0];
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async teacherDeleteChoice(teacherId, choiceId) {
-    await poolConnect;
     await assertChoiceOwnedByTeacher(teacherId, choiceId);
 
-    await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, choiceId)
-      .query(`
-        UPDATE test_choices
-        SET is_deleted = 1
-        WHERE id = @id AND is_deleted = 0
-      `);
+    const { error } = await supabase
+      .from("test_choices")
+      .update({
+        is_deleted: true,
+      })
+      .eq("id", choiceId)
+      .eq("is_deleted", false);
+
+    if (error) throw new Error(error.message);
   },
 
-  /* =========================
-     STUDENT: ATTEMPTS
-  ========================= */
   async studentStartAttempt(studentId, testId) {
-    await poolConnect;
+    const { data: test, error: testError } = await supabase
+      .from("tests")
+      .select("*")
+      .eq("id", testId)
+      .eq("is_deleted", false)
+      .eq("status", "PUBLISHED")
+      .single();
 
-    const testRs = await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, testId)
-      .query(`
-        SELECT *
-        FROM tests
-        WHERE id = @id AND is_deleted = 0 AND status = 'PUBLISHED'
-      `);
-
-    if (testRs.recordset.length === 0) {
+    if (testError || !test) {
       throw new Error("Bài kiểm tra không tồn tại hoặc chưa publish");
     }
 
-    const test = testRs.recordset[0];
+    if (test.max_attempts !== null && test.max_attempts !== undefined) {
+      const { data: attempts, error: cntError } = await supabase
+        .from("test_attempts")
+        .select("id")
+        .eq("test_id", testId)
+        .eq("student_id", studentId)
+        .in("status", ["SUBMITTED", "GRADED"]);
 
-    if (test.max_attempts !== null) {
-      const cntRs = await pool
-        .request()
-        .input("test_id", sql.UniqueIdentifier, testId)
-        .input("student_id", sql.UniqueIdentifier, studentId)
-        .query(`
-          SELECT COUNT(*) AS total
-          FROM test_attempts
-          WHERE test_id = @test_id
-            AND student_id = @student_id
-            AND status IN ('SUBMITTED', 'GRADED')
-        `);
-
-      const total = Number(cntRs.recordset[0].total);
-      if (total >= test.max_attempts) {
+      if (cntError) throw new Error(cntError.message);
+      const total = attempts?.length || 0;
+      if (total >= Number(test.max_attempts)) {
         throw new Error("Bạn đã vượt quá số lần làm bài cho phép");
       }
     }
 
-    const rs = await pool
-      .request()
-      .input("test_id", sql.UniqueIdentifier, testId)
-      .input("student_id", sql.UniqueIdentifier, studentId)
-      .query(`
-        INSERT INTO test_attempts (
-          test_id, student_id, started_at, status, score, max_score
-        )
-        OUTPUT INSERTED.*
-        VALUES (
-          @test_id, @student_id, SYSDATETIMEOFFSET(), 'IN_PROGRESS', NULL, NULL
-        )
-      `);
+    const { data, error } = await supabase
+      .from("test_attempts")
+      .insert({
+        test_id: testId,
+        student_id: studentId,
+        started_at: new Date().toISOString(),
+        status: "IN_PROGRESS",
+        score: null,
+        max_score: null,
+      })
+      .select("*")
+      .single();
 
-    return rs.recordset[0];
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async studentGetAttemptDetail(studentId, attemptId) {
-    await poolConnect;
     const attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
 
     if (attempt.status !== "IN_PROGRESS") {
       throw new Error("Attempt này không còn ở trạng thái làm bài");
     }
 
-    const testRs = await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, attempt.test_id)
-      .query(`
-        SELECT id, title, description, duration_minutes, shuffle_questions, shuffle_choices
-        FROM tests
-        WHERE id = @id AND is_deleted = 0
-      `);
+    const { data: test, error: testError } = await supabase
+      .from("tests")
+      .select("id, title, description, duration_minutes, shuffle_questions, shuffle_choices")
+      .eq("id", attempt.test_id)
+      .eq("is_deleted", false)
+      .single();
 
-    const questionsRs = await pool
-      .request()
-      .input("test_id", sql.UniqueIdentifier, attempt.test_id)
-      .query(`
-        SELECT id, question_text, points, position
-        FROM test_questions
-        WHERE test_id = @test_id AND is_deleted = 0
-        ORDER BY position ASC, created_at ASC
-      `);
+    if (testError) throw new Error(testError.message);
 
-    const questions = [];
-    for (const q of questionsRs.recordset) {
-      const choicesRs = await pool
-        .request()
-        .input("question_id", sql.UniqueIdentifier, q.id)
-        .query(`
-          SELECT id, question_id, choice_text, position
-          FROM test_choices
-          WHERE question_id = @question_id AND is_deleted = 0
-          ORDER BY position ASC, id ASC
-        `);
+    const questions = await getQuestionsWithChoices(attempt.test_id, false);
 
-      const answerRs = await pool
-        .request()
-        .input("attempt_id", sql.UniqueIdentifier, attemptId)
-        .input("question_id", sql.UniqueIdentifier, q.id)
-        .query(`
-          SELECT choice_id
-          FROM test_attempt_answers
-          WHERE attempt_id = @attempt_id AND question_id = @question_id
-        `);
+    const resultQuestions = [];
+    for (const q of questions) {
+      const { data: answer, error: aError } = await supabase
+        .from("test_attempt_answers")
+        .select("choice_id")
+        .eq("attempt_id", attemptId)
+        .eq("question_id", q.id)
+        .maybeSingle();
 
-      questions.push({
+      if (aError) throw new Error(aError.message);
+
+      resultQuestions.push({
         ...q,
-        choices: choicesRs.recordset,
-        selected_choice_id: answerRs.recordset[0]?.choice_id || null,
+        selected_choice_id: answer?.choice_id || null,
       });
     }
 
@@ -689,13 +685,12 @@ module.exports = {
         submitted_at: attempt.submitted_at,
         status: attempt.status,
       },
-      test: testRs.recordset[0],
-      questions,
+      test,
+      questions: resultQuestions,
     };
   },
 
   async studentSaveAnswer(studentId, attemptId, payload) {
-    await poolConnect;
     const attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
 
     if (attempt.status !== "IN_PROGRESS") {
@@ -704,227 +699,202 @@ module.exports = {
 
     if (!payload.question_id) throw new Error("question_id là bắt buộc");
 
-    const qRs = await pool
-      .request()
-      .input("question_id", sql.UniqueIdentifier, payload.question_id)
-      .input("test_id", sql.UniqueIdentifier, attempt.test_id)
-      .query(`
-        SELECT id
-        FROM test_questions
-        WHERE id = @question_id AND test_id = @test_id AND is_deleted = 0
-      `);
+    const { data: question, error: qError } = await supabase
+      .from("test_questions")
+      .select("id")
+      .eq("id", payload.question_id)
+      .eq("test_id", attempt.test_id)
+      .eq("is_deleted", false)
+      .single();
 
-    if (qRs.recordset.length === 0) {
+    if (qError || !question) {
       throw new Error("question_id không thuộc bài kiểm tra này");
     }
 
     if (payload.choice_id) {
-      const cRs = await pool
-        .request()
-        .input("choice_id", sql.UniqueIdentifier, payload.choice_id)
-        .input("question_id", sql.UniqueIdentifier, payload.question_id)
-        .query(`
-          SELECT id
-          FROM test_choices
-          WHERE id = @choice_id AND question_id = @question_id AND is_deleted = 0
-        `);
+      const { data: choice, error: cError } = await supabase
+        .from("test_choices")
+        .select("id")
+        .eq("id", payload.choice_id)
+        .eq("question_id", payload.question_id)
+        .eq("is_deleted", false)
+        .single();
 
-      if (cRs.recordset.length === 0) {
+      if (cError || !choice) {
         throw new Error("choice_id không thuộc question này");
       }
     }
 
-    const rs = await pool
-      .request()
-      .input("attempt_id", sql.UniqueIdentifier, attemptId)
-      .input("question_id", sql.UniqueIdentifier, payload.question_id)
-      .input("choice_id", sql.UniqueIdentifier, payload.choice_id ?? null)
-      .query(`
-        MERGE test_attempt_answers AS target
-        USING (
-          SELECT @attempt_id AS attempt_id, @question_id AS question_id
-        ) AS src
-        ON target.attempt_id = src.attempt_id AND target.question_id = src.question_id
-        WHEN MATCHED THEN
-          UPDATE SET choice_id = @choice_id
-        WHEN NOT MATCHED THEN
-          INSERT (attempt_id, question_id, choice_id, is_correct, points_earned)
-          VALUES (@attempt_id, @question_id, @choice_id, NULL, NULL)
-        OUTPUT INSERTED.*;
-      `);
+    const { data: existing, error: existingError } = await supabase
+      .from("test_attempt_answers")
+      .select("id")
+      .eq("attempt_id", attemptId)
+      .eq("question_id", payload.question_id)
+      .maybeSingle();
 
-    return rs.recordset[0];
+    if (existingError) throw new Error(existingError.message);
+
+    if (existing?.id) {
+      const { data, error } = await supabase
+        .from("test_attempt_answers")
+        .update({
+          choice_id: payload.choice_id ?? null,
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data;
+    }
+
+    const { data, error } = await supabase
+      .from("test_attempt_answers")
+      .insert({
+        attempt_id: attemptId,
+        question_id: payload.question_id,
+        choice_id: payload.choice_id ?? null,
+        is_correct: null,
+        points_earned: null,
+      })
+      .select("*")
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async studentSubmitAttempt(studentId, attemptId) {
-    await poolConnect;
     const attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
 
     if (attempt.status !== "IN_PROGRESS") {
       throw new Error("Attempt đã nộp rồi");
     }
 
-    const tx = new sql.Transaction(pool);
-    await tx.begin();
+    const { data: questions, error: qError } = await supabase
+      .from("test_questions")
+      .select("id, points")
+      .eq("test_id", attempt.test_id)
+      .eq("is_deleted", false);
 
-    try {
-      const questionsRs = await new sql.Request(tx)
-        .input("test_id", sql.UniqueIdentifier, attempt.test_id)
-        .query(`
-          SELECT id, points
-          FROM test_questions
-          WHERE test_id = @test_id AND is_deleted = 0
-        `);
+    if (qError) throw new Error(qError.message);
 
-      let score = 0;
-      let maxScore = 0;
+    let score = 0;
+    let maxScore = 0;
 
-      for (const q of questionsRs.recordset) {
-        maxScore += Number(q.points);
+    for (const q of questions || []) {
+      maxScore += Number(q.points || 0);
 
-        const correctRs = await new sql.Request(tx)
-          .input("question_id", sql.UniqueIdentifier, q.id)
-          .query(`
-            SELECT TOP 1 id
-            FROM test_choices
-            WHERE question_id = @question_id
-              AND is_deleted = 0
-              AND is_correct = 1
-            ORDER BY position ASC, id ASC
-          `);
+      const { data: correctChoice, error: correctError } = await supabase
+        .from("test_choices")
+        .select("id")
+        .eq("question_id", q.id)
+        .eq("is_deleted", false)
+        .eq("is_correct", true)
+        .order("position", { ascending: true })
+        .order("id", { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
-        const correctChoiceId = correctRs.recordset[0]?.id || null;
+      if (correctError) throw new Error(correctError.message);
 
-        const answerRs = await new sql.Request(tx)
-          .input("attempt_id", sql.UniqueIdentifier, attemptId)
-          .input("question_id", sql.UniqueIdentifier, q.id)
-          .query(`
-            SELECT id, choice_id
-            FROM test_attempt_answers
-            WHERE attempt_id = @attempt_id AND question_id = @question_id
-          `);
+      const { data: answer, error: answerError } = await supabase
+        .from("test_attempt_answers")
+        .select("id, choice_id")
+        .eq("attempt_id", attemptId)
+        .eq("question_id", q.id)
+        .maybeSingle();
 
-        if (answerRs.recordset.length === 0) {
-          await new sql.Request(tx)
-            .input("attempt_id", sql.UniqueIdentifier, attemptId)
-            .input("question_id", sql.UniqueIdentifier, q.id)
-            .input("choice_id", sql.UniqueIdentifier, null)
-            .input("is_correct", sql.Bit, false)
-            .input("points_earned", sql.Decimal(6, 2), 0)
-            .query(`
-              INSERT INTO test_attempt_answers (
-                attempt_id, question_id, choice_id, is_correct, points_earned
-              )
-              VALUES (
-                @attempt_id, @question_id, @choice_id, @is_correct, @points_earned
-              )
-            `);
-          continue;
-        }
+      if (answerError) throw new Error(answerError.message);
 
-        const selectedChoiceId = answerRs.recordset[0].choice_id || null;
-        const isCorrect =
-          correctChoiceId &&
-          selectedChoiceId &&
-          String(correctChoiceId).toLowerCase() === String(selectedChoiceId).toLowerCase();
+      const correctChoiceId = correctChoice?.id || null;
+      const selectedChoiceId = answer?.choice_id || null;
+      const isCorrect =
+        !!correctChoiceId &&
+        !!selectedChoiceId &&
+        String(correctChoiceId).toLowerCase() === String(selectedChoiceId).toLowerCase();
 
-        const pointsEarned = isCorrect ? Number(q.points) : 0;
-        score += pointsEarned;
+      const pointsEarned = isCorrect ? Number(q.points || 0) : 0;
+      score += pointsEarned;
 
-        await new sql.Request(tx)
-          .input("attempt_id", sql.UniqueIdentifier, attemptId)
-          .input("question_id", sql.UniqueIdentifier, q.id)
-          .input("is_correct", sql.Bit, !!isCorrect)
-          .input("points_earned", sql.Decimal(6, 2), pointsEarned)
-          .query(`
-            UPDATE test_attempt_answers
-            SET is_correct = @is_correct,
-                points_earned = @points_earned
-            WHERE attempt_id = @attempt_id AND question_id = @question_id
-          `);
+      if (answer?.id) {
+        const { error: updateAnswerError } = await supabase
+          .from("test_attempt_answers")
+          .update({
+            is_correct: isCorrect,
+            points_earned: pointsEarned,
+          })
+          .eq("id", answer.id);
+
+        if (updateAnswerError) throw new Error(updateAnswerError.message);
+      } else {
+        const { error: insertAnswerError } = await supabase
+          .from("test_attempt_answers")
+          .insert({
+            attempt_id: attemptId,
+            question_id: q.id,
+            choice_id: null,
+            is_correct: false,
+            points_earned: 0,
+          });
+
+        if (insertAnswerError) throw new Error(insertAnswerError.message);
       }
+    }
 
-      await new sql.Request(tx)
-        .input("id", sql.UniqueIdentifier, attemptId)
-        .input("score", sql.Decimal(6, 2), score)
-        .input("max_score", sql.Decimal(6, 2), maxScore)
-        .query(`
-          UPDATE test_attempts
-          SET submitted_at = SYSDATETIMEOFFSET(),
-              status = 'GRADED',
-              score = @score,
-              max_score = @max_score
-          WHERE id = @id
-        `);
-
-      await tx.commit();
-
-      return {
-        attempt_id: attemptId,
+    const { error: updateAttemptError } = await supabase
+      .from("test_attempts")
+      .update({
+        submitted_at: new Date().toISOString(),
+        status: "GRADED",
         score,
         max_score: maxScore,
-      };
-    } catch (e) {
-      await tx.rollback();
-      throw e;
-    }
+      })
+      .eq("id", attemptId);
+
+    if (updateAttemptError) throw new Error(updateAttemptError.message);
+
+    return {
+      attempt_id: attemptId,
+      score,
+      max_score: maxScore,
+    };
   },
 
   async studentReviewAttempt(studentId, attemptId) {
-    await poolConnect;
     const attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
 
     if (!["SUBMITTED", "GRADED"].includes(attempt.status)) {
       throw new Error("Bạn chỉ có thể xem lại sau khi nộp bài");
     }
 
-    const testRs = await pool
-      .request()
-      .input("id", sql.UniqueIdentifier, attempt.test_id)
-      .query(`
-        SELECT id, title, description
-        FROM tests
-        WHERE id = @id AND is_deleted = 0
-      `);
+    const { data: test, error: testError } = await supabase
+      .from("tests")
+      .select("id, title, description")
+      .eq("id", attempt.test_id)
+      .eq("is_deleted", false)
+      .single();
 
-    const questionsRs = await pool
-      .request()
-      .input("test_id", sql.UniqueIdentifier, attempt.test_id)
-      .query(`
-        SELECT id, question_text, points, position
-        FROM test_questions
-        WHERE test_id = @test_id AND is_deleted = 0
-        ORDER BY position ASC, created_at ASC
-      `);
+    if (testError) throw new Error(testError.message);
 
-    const questions = [];
-    for (const q of questionsRs.recordset) {
-      const choicesRs = await pool
-        .request()
-        .input("question_id", sql.UniqueIdentifier, q.id)
-        .query(`
-          SELECT id, question_id, choice_text, is_correct, position
-          FROM test_choices
-          WHERE question_id = @question_id AND is_deleted = 0
-          ORDER BY position ASC, id ASC
-        `);
+    const questions = await getQuestionsWithChoices(attempt.test_id, true);
 
-      const answerRs = await pool
-        .request()
-        .input("attempt_id", sql.UniqueIdentifier, attemptId)
-        .input("question_id", sql.UniqueIdentifier, q.id)
-        .query(`
-          SELECT choice_id, is_correct, points_earned
-          FROM test_attempt_answers
-          WHERE attempt_id = @attempt_id AND question_id = @question_id
-        `);
+    const resultQuestions = [];
+    for (const q of questions) {
+      const { data: answer, error: aError } = await supabase
+        .from("test_attempt_answers")
+        .select("choice_id, is_correct, points_earned")
+        .eq("attempt_id", attemptId)
+        .eq("question_id", q.id)
+        .maybeSingle();
 
-      questions.push({
+      if (aError) throw new Error(aError.message);
+
+      resultQuestions.push({
         ...q,
-        choices: choicesRs.recordset,
-        selected_choice_id: answerRs.recordset[0]?.choice_id || null,
-        is_correct: answerRs.recordset[0]?.is_correct ?? false,
-        points_earned: answerRs.recordset[0]?.points_earned ?? 0,
+        selected_choice_id: answer?.choice_id || null,
+        is_correct: answer?.is_correct ?? false,
+        points_earned: answer?.points_earned ?? 0,
       });
     }
 
@@ -938,8 +908,8 @@ module.exports = {
         score: attempt.score,
         max_score: attempt.max_score,
       },
-      test: testRs.recordset[0],
-      questions,
+      test,
+      questions: resultQuestions,
     };
   },
 };
