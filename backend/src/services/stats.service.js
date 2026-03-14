@@ -31,8 +31,11 @@ async function getAdminStats() {
   };
 }
 
-async function getAdminRevenueDetail() {
+async function getAdminRevenueDetail(filters = {}) {
   await poolConnect;
+  const { course_id, status } = filters;
+  const hasFilter = course_id || status;
+
   const [
     summary,
     byMonth,
@@ -72,17 +75,45 @@ async function getAdminRevenueDetail() {
       GROUP BY c.id, c.title
       ORDER BY SUM(p.amount) DESC
     `),
-    pool.request().query(`
-      SELECT TOP 50
-        p.id, p.amount, p.status, p.created_at,
-        u.full_name AS student_name, u.email AS student_email,
-        c.title AS course_title, t.full_name AS teacher_name
-      FROM payments p
-      LEFT JOIN users u ON u.id = p.student_id
-      LEFT JOIN courses c ON c.id = p.course_id
-      LEFT JOIN users t ON t.id = c.teacher_id
-      ORDER BY p.created_at DESC
-    `),
+    (async () => {
+      if (!hasFilter) {
+        const r = await pool.request().query(`
+          SELECT TOP 50
+            p.id, p.amount, p.status, p.created_at,
+            u.full_name AS student_name, u.email AS student_email,
+            c.title AS course_title, t.full_name AS teacher_name
+          FROM payments p
+          LEFT JOIN users u ON u.id = p.student_id
+          LEFT JOIN courses c ON c.id = p.course_id
+          LEFT JOIN users t ON t.id = c.teacher_id
+          ORDER BY p.created_at DESC
+        `);
+        return r;
+      }
+      let req = pool.request();
+      const conditions = [];
+      if (course_id) {
+        req = req.input("course_id", sql.UniqueIdentifier, course_id);
+        conditions.push("p.course_id = @course_id");
+      }
+      if (status) {
+        req = req.input("status", sql.NVarChar(50), status);
+        conditions.push("p.status = @status");
+      }
+      const whereClause = "WHERE " + conditions.join(" AND ");
+      return req.query(`
+        SELECT TOP 50
+          p.id, p.amount, p.status, p.created_at,
+          u.full_name AS student_name, u.email AS student_email,
+          c.title AS course_title, t.full_name AS teacher_name
+        FROM payments p
+        LEFT JOIN users u ON u.id = p.student_id
+        LEFT JOIN courses c ON c.id = p.course_id
+        LEFT JOIN users t ON t.id = c.teacher_id
+        ${whereClause}
+        ORDER BY p.created_at DESC
+      `);
+    })(),
     pool.request().query(`
       SELECT status, COUNT(*) AS cnt
       FROM payments

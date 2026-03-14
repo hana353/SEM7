@@ -1,5 +1,70 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import api from "../../api/axios";
+
+const COLORS = ["#22c55e", "#eab308", "#ef4444", "#3b82f6", "#a855f7", "#ec4899", "#f97316"];
+
+function ConfettiCanvas({ active, durationMs = 3000 }) {
+  const canvasRef = useRef(null);
+  const particlesRef = useRef([]);
+  const rafRef = useRef(null);
+  const startRef = useRef(null);
+
+  useEffect(() => {
+    if (!active || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const w = (canvas.width = window.innerWidth);
+    const h = (canvas.height = window.innerHeight);
+    const count = 120;
+    const particles = [];
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 8,
+        vy: -Math.random() * 12 - 6,
+        size: Math.random() * 8 + 4,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        rotation: Math.random() * 360,
+        rotationSpeed: (Math.random() - 0.5) * 10,
+      });
+    }
+    particlesRef.current = particles;
+    startRef.current = Date.now();
+
+    const tick = () => {
+      const elapsed = Date.now() - startRef.current;
+      if (elapsed >= durationMs) return;
+      ctx.clearRect(0, 0, w, h);
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.35;
+        p.rotation += p.rotationSpeed;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rotation * Math.PI) / 180);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
+      });
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [active, durationMs]);
+
+  if (!active) return null;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none z-50"
+      style={{ width: "100%", height: "100%" }}
+    />
+  );
+}
 
 const getSpeechRecognition = () => {
   if (typeof window === "undefined") return null;
@@ -22,6 +87,7 @@ const VocabularyPractice = () => {
   const [status, setStatus] = useState("");
   const [remindWords, setRemindWords] = useState([]);
   const [loadingRemind, setLoadingRemind] = useState(false);
+  const [showCongrats, setShowCongrats] = useState(false);
 
   useEffect(() => {
     setLoadingTopics(true);
@@ -116,9 +182,20 @@ const VocabularyPractice = () => {
       }
 
       if (passed) {
-        setTimeout(() => {
-          handleNext();
-        }, 800);
+        const isLastWord = currentIndex === words.length - 1;
+        if (isLastWord) {
+          setTimeout(() => {
+            setShowCongrats(true);
+            setTimeout(() => {
+              setShowCongrats(false);
+              handleNext();
+            }, 3000);
+          }, 2500);
+        } else {
+          setTimeout(() => {
+            handleNext();
+          }, 2500);
+        }
       }
     };
 
@@ -135,7 +212,17 @@ const VocabularyPractice = () => {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto relative">
+      <ConfettiCanvas active={showCongrats} durationMs={3000} />
+      {showCongrats && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl px-8 py-10 text-center">
+            <p className="text-4xl font-bold text-green-600 mb-2">🎉 Chúc mừng!</p>
+            <p className="text-lg text-gray-700">Bạn đã hoàn thành luyện từ vựng chủ đề này.</p>
+            <p className="text-sm text-gray-500 mt-2">Hiệu ứng pháo sẽ kết thúc sau 3 giây...</p>
+          </div>
+        </div>
+      )}
       <h1 className="text-3xl font-bold mb-4">Luyện từ vựng (Free)</h1>
       <p className="text-gray-600 mb-6">
         Sau khi đăng ký, bạn có thể học các bộ từ vựng miễn phí do admin tạo,
@@ -228,10 +315,18 @@ const VocabularyPractice = () => {
               </p>
             ) : currentWord ? (
               <>
+                <div className="mb-2">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Thẻ {currentIndex + 1} / {words.length}</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                      style={{ width: `${words.length ? ((currentIndex + 1) / words.length) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">
-                    Thẻ {currentIndex + 1} / {words.length}
-                  </p>
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">
                     {currentWord.word}
                   </h2>
@@ -300,7 +395,15 @@ const VocabularyPractice = () => {
                     </p>
                   )}
                   {status && (
-                    <p className="text-xs mt-1 text-gray-700">{status}</p>
+                    <p
+                      className={`text-sm mt-2 font-semibold px-3 py-2 rounded-lg ${
+                        status.startsWith("Chính xác")
+                          ? "bg-green-500 text-white"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      {status}
+                    </p>
                   )}
                 </>
               )}

@@ -6,6 +6,8 @@ import TeacherHomePage from "../pages/teacher/TeacherHomePage";
 import TeacherCourseDetail from "../pages/teacher/TeacherCourseDetail";
 import StudentHomePage from "../pages/student/StudentHomePage";
 import StudentCourseDetail from "../pages/student/StudentCourseDetail";
+import StudentQuizPage from "../pages/student/StudentQuizPage";
+import StudentTestAttemptPage from "../pages/student/StudentTestAttemptPage";
 import PaymentResult from "../pages/student/PaymentResult";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getRoleCode } from "../auth/session";
@@ -25,6 +27,8 @@ export default function AppRouter() {
         <Route element={<ProtectedRoute allowRoles={[ROLE.STUDENT]} />}>
           <Route path="/studenthomepage" element={<StudentHomePage />} />
           <Route path="/student/course/:courseId" element={<StudentCourseDetail />} />
+          <Route path="/student/quiz/:quizId" element={<StudentQuizPage />} />
+          <Route path="/student/attempt/:attemptId" element={<StudentTestAttemptPage />} />
           <Route path="/student/payment-result" element={<PaymentResult />} />
         </Route>
 

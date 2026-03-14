@@ -86,7 +86,7 @@ export default function AdminHomePage() {
             users={users}
             onCreated={() => api.get("/courses").then(r => setCourses(Array.isArray(r.data) ? r.data : []))}
           />
-          {loadingCourses ? <div className="rounded-xl bg-white border p-6 text-center text-slate-500">Đang tải...</div> : <CoursesTable courses={courses} />}
+          {loadingCourses ? <div className="rounded-xl bg-white border p-6 text-center text-slate-500">Đang tải...</div> : <CoursesTable courses={courses} onUpdated={() => api.get("/courses").then(r => setCourses(Array.isArray(r.data) ? r.data : []))} />}
         </div>
       );
     }

@@ -8,16 +8,27 @@ const MONTH_NAMES = [
 
 function RevenuePage() {
   const [data, setData] = useState(null);
+  const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [filterCourseId, setFilterCourseId] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
 
   useEffect(() => {
+    api.get("/courses").then((r) => setCourses(Array.isArray(r.data) ? r.data : [])).catch(() => setCourses([]));
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (filterCourseId) params.set("course_id", filterCourseId);
+    if (filterStatus) params.set("status", filterStatus);
     api
-      .get("/stats/admin/revenue")
+      .get("/stats/admin/revenue" + (params.toString() ? "?" + params.toString() : ""))
       .then((res) => setData(res.data))
       .catch((err) => setError(err.response?.data?.message || "Không tải được dữ liệu"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterCourseId, filterStatus]);
 
   if (loading) {
     return (
@@ -162,11 +173,36 @@ function RevenuePage() {
         </section>
       )}
 
-      {/* Giao dịch gần đây */}
+      {/* Bộ lọc + Giao dịch gần đây */}
       <section className="rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-        <h2 className="text-sm font-semibold text-slate-900 px-4 py-3 border-b border-slate-100">
-          Giao dịch gần đây (50 mục)
-        </h2>
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-100">
+          <h2 className="text-sm font-semibold text-slate-900">
+            Giao dịch gần đây (50 mục)
+          </h2>
+          <span className="text-xs text-slate-500">Bộ lọc:</span>
+          <select
+            value={filterCourseId}
+            onChange={(e) => setFilterCourseId(e.target.value)}
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+          >
+            <option value="">Tất cả khóa học</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+          >
+            <option value="">Tất cả trạng thái</option>
+            <option value="COMPLETED">COMPLETED</option>
+            <option value="SUCCESS">SUCCESS</option>
+            <option value="PAID">PAID</option>
+            <option value="PENDING">PENDING</option>
+            <option value="FAILED">FAILED</option>
+          </select>
+        </div>
         <div className="overflow-x-auto max-h-96 overflow-y-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 sticky top-0">

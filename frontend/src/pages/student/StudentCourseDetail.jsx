@@ -290,11 +290,7 @@ export default function StudentCourseDetail() {
                       <button
                         type="button"
                         className="text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
-                        onClick={() =>
-                          alert(
-                            "Luồng làm quiz chi tiết (flashcard / kiểm tra) sẽ được triển khai ở bước tiếp theo."
-                          )
-                        }
+                        onClick={() => navigate(`/student/quiz/${q.id}`)}
                       >
                         Làm quiz
                       </button>
@@ -332,11 +328,16 @@ export default function StudentCourseDetail() {
                       <button
                         type="button"
                         className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500"
-                        onClick={() =>
-                          alert(
-                            "Luồng làm test (tạo attempt, làm bài, chấm điểm) sẽ được triển khai chi tiết ở bước tiếp theo."
-                          )
-                        }
+                        onClick={async () => {
+                          try {
+                            const res = await api.post(`/tests/${t.id}/attempts`);
+                            const attemptId = res.data?.data?.id;
+                            if (attemptId) navigate(`/student/attempt/${attemptId}`);
+                            else setError("Không thể bắt đầu làm bài");
+                          } catch (err) {
+                            setError(err.response?.data?.message || "Không thể bắt đầu làm bài");
+                          }
+                        }}
                       >
                         Làm test
                       </button>

@@ -8,6 +8,67 @@ const tabs = [
   { id: "tests", label: "Bài test" },
 ];
 
+/* ========== MODAL CHỈNH SỬA BÀI GIẢNG ========== */
+function EditLectureModal({ lecture, onClose, onSuccess }) {
+  const [title, setTitle] = useState(lecture?.title ?? "");
+  const [videoUrl, setVideoUrl] = useState(lecture?.video_url ?? "");
+  const [durationMinutes, setDurationMinutes] = useState(lecture?.duration_minutes ?? 10);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!title.trim()) {
+      setError("Tiêu đề không được để trống");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.patch(`/lectures/${lecture.id}`, {
+        title: title.trim(),
+        video_url: videoUrl.trim() || null,
+        duration_minutes: Number(durationMinutes) || 0,
+      });
+      onSuccess?.();
+      onClose?.();
+    } catch (err) {
+      setError(err.response?.data?.message || "Lỗi khi cập nhật bài giảng");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="border-b border-slate-200 px-4 py-3">
+          <h3 className="text-sm font-semibold text-slate-900">Chỉnh sửa bài giảng</h3>
+        </div>
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Tiêu đề bài giảng</label>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Link video</label>
+            <input type="url" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="URL video" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Thời lượng (phút)</label>
+            <input type="number" min={1} value={durationMinutes} onChange={(e) => setDurationMinutes(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Hủy</button>
+            <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">{saving ? "Đang lưu…" : "Lưu"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 /* ========== MODAL THÊM BÀI GIẢNG ========== */
 function AddLectureModal({ courseId, onClose, onSuccess }) {
   const [title, setTitle] = useState("");
@@ -454,6 +515,122 @@ function AddTestModal({ courseId, onClose, onSuccess }) {
   );
 }
 
+/* ========== MODAL XEM CHI TIẾT QUIZ (DANH SÁCH CÂU HỎI) ========== */
+function QuizDetailModal({ quizId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api.get(`/quizzes/teacher/${quizId}`).then((r) => setData(r.data?.data)).catch(() => setData(null)).finally(() => setLoading(false));
+  }, [quizId]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl my-8 max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+          <h3 className="text-sm font-semibold text-slate-900">Danh sách câu hỏi Quiz</h3>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700">Đóng</button>
+        </div>
+        <div className="p-4 overflow-y-auto flex-1">
+          {loading ? <p className="text-slate-500">Đang tải...</p> : !data ? <p className="text-slate-500">Không tải được dữ liệu</p> : (
+            <>
+              <p className="text-xs text-slate-600 mb-3">Quiz: {data.title}</p>
+              {(data.cards || []).length === 0 ? <p className="text-slate-500">Chưa có câu hỏi</p> : (
+                <ul className="space-y-3">
+                  {(data.cards || []).map((card, i) => (
+                    <li key={card.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                      <p className="text-xs font-medium text-slate-600">Câu {i + 1}</p>
+                      <p className="text-sm text-slate-900 mt-1">{card.front_text}</p>
+                      <p className="text-xs text-emerald-700 mt-1">Đáp án đúng: {card.back_text}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========== MODAL XEM CHI TIẾT TEST (DANH SÁCH CÂU HỎI) ========== */
+function TestDetailModal({ testId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api.get(`/tests/teacher/${testId}`).then((r) => setData(r.data?.data)).catch(() => setData(null)).finally(() => setLoading(false));
+  }, [testId]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl my-8 max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+          <h3 className="text-sm font-semibold text-slate-900">Danh sách câu hỏi Bài test</h3>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700">Đóng</button>
+        </div>
+        <div className="p-4 overflow-y-auto flex-1">
+          {loading ? <p className="text-slate-500">Đang tải...</p> : !data ? <p className="text-slate-500">Không tải được dữ liệu</p> : (
+            <>
+              <p className="text-xs text-slate-600 mb-3">Test: {data.title}</p>
+              {(data.questions || []).length === 0 ? <p className="text-slate-500">Chưa có câu hỏi</p> : (
+                <ul className="space-y-3">
+                  {(data.questions || []).map((q, i) => (
+                    <li key={q.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                      <p className="text-xs font-medium text-slate-600">Câu {i + 1}</p>
+                      <p className="text-sm text-slate-900 mt-1">{q.question_text}</p>
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {(q.choices || []).map((c) => (
+                          <li key={c.id} className={c.is_correct ? "text-emerald-700 font-medium" : "text-slate-600"}>{c.choice_text} {c.is_correct ? "(đáp án đúng)" : ""}</li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========== MODAL LỊCH SỬ LÀM BÀI TEST ========== */
+function TestAttemptsModal({ testId, onClose }) {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api.get(`/tests/teacher/${testId}/attempts`).then((r) => setList(r.data?.data || [])).catch(() => setList([])).finally(() => setLoading(false));
+  }, [testId]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl my-8 max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+          <h3 className="text-sm font-semibold text-slate-900">Lịch sử làm bài của học sinh</h3>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700">Đóng</button>
+        </div>
+        <div className="p-4 overflow-y-auto flex-1">
+          {loading ? <p className="text-slate-500">Đang tải...</p> : list.length === 0 ? <p className="text-slate-500">Chưa có lần làm bài nào</p> : (
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
+                <tr><th className="px-3 py-2">Học sinh</th><th className="px-3 py-2">Email</th><th className="px-3 py-2">Điểm</th><th className="px-3 py-2">Nộp bài</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {list.map((a) => (
+                  <tr key={a.id} className="hover:bg-slate-50/70">
+                    <td className="px-3 py-2 text-slate-900">{a.student_name || "—"}</td>
+                    <td className="px-3 py-2 text-slate-600">{a.student_email || "—"}</td>
+                    <td className="px-3 py-2 font-medium">{a.score != null ? `${a.score}/${a.max_score ?? "—"}` : "—"}</td>
+                    <td className="px-3 py-2 text-slate-500 text-xs">{a.submitted_at ? new Date(a.submitted_at).toLocaleString("vi-VN") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TeacherCourseDetail() {
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -465,8 +642,12 @@ export default function TeacherCourseDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showLectureModal, setShowLectureModal] = useState(false);
+  const [editingLecture, setEditingLecture] = useState(null);
   const [showQuizModal, setShowQuizModal] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
+  const [quizDetailModal, setQuizDetailModal] = useState(null);
+  const [testDetailModal, setTestDetailModal] = useState(null);
+  const [testAttemptsModal, setTestAttemptsModal] = useState(null);
 
   const refresh = () => {
     if (!courseId) return;
@@ -537,7 +718,10 @@ export default function TeacherCourseDetail() {
                       <span className="font-medium">{i + 1}. {l.title}</span>
                       {l.video_url && <span className="ml-2 text-xs text-slate-500">(có video)</span>}
                     </div>
-                    <span className="text-sm text-slate-500">{l.duration_minutes || 0} phút</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-500">{l.duration_minutes || 0} phút</span>
+                      <button type="button" onClick={() => setEditingLecture(l)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">Chỉnh sửa</button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -564,7 +748,10 @@ export default function TeacherCourseDetail() {
                 {quizzes.map((q) => (
                   <li key={q.id} className="flex justify-between items-center py-2 border-b last:border-0">
                     <span>{q.title}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{q.status || "DRAFT"}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{q.status || "DRAFT"}</span>
+                      <button type="button" onClick={() => setQuizDetailModal(q.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem danh sách câu hỏi</button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -591,7 +778,11 @@ export default function TeacherCourseDetail() {
                 {tests.map((t) => (
                   <li key={t.id} className="flex justify-between items-center py-2 border-b last:border-0">
                     <span>{t.title}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{t.status || "DRAFT"}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{t.status || "DRAFT"}</span>
+                      <button type="button" onClick={() => setTestDetailModal(t.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem câu hỏi</button>
+                      <button type="button" onClick={() => setTestAttemptsModal(t.id)} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500">Lịch sử làm bài</button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -603,8 +794,14 @@ export default function TeacherCourseDetail() {
       {showLectureModal && (
         <AddLectureModal courseId={courseId} onClose={() => setShowLectureModal(false)} onSuccess={refresh} />
       )}
+      {editingLecture && (
+        <EditLectureModal lecture={editingLecture} onClose={() => setEditingLecture(null)} onSuccess={() => { setEditingLecture(null); refresh(); }} />
+      )}
       {showQuizModal && <AddQuizModal courseId={courseId} onClose={() => setShowQuizModal(false)} onSuccess={refresh} />}
       {showTestModal && <AddTestModal courseId={courseId} onClose={() => setShowTestModal(false)} onSuccess={refresh} />}
+      {quizDetailModal && <QuizDetailModal quizId={quizDetailModal} onClose={() => setQuizDetailModal(null)} />}
+      {testDetailModal && <TestDetailModal testId={testDetailModal} onClose={() => setTestDetailModal(null)} />}
+      {testAttemptsModal && <TestAttemptsModal testId={testAttemptsModal} onClose={() => setTestAttemptsModal(null)} />}
     </div>
   );
 }

@@ -22,6 +22,7 @@ router.get("/attempts/:attemptId/review", requireAuth, requireRole("STUDENT"), c
 ========================= */
 router.post("/", requireAuth, requireRole("TEACHER"), controller.teacherCreateTest);
 router.get("/teacher/list", requireAuth, requireRole("TEACHER"), controller.teacherListTests);
+router.get("/teacher/:id/attempts", requireAuth, requireRole("TEACHER"), controller.teacherListTestAttempts);
 router.get("/teacher/:id", requireAuth, requireRole("TEACHER"), controller.teacherGetTestDetail);
 router.patch("/teacher/:id", requireAuth, requireRole("TEACHER"), controller.teacherUpdateTest);
 router.delete("/teacher/:id", requireAuth, requireRole("TEACHER"), controller.teacherDeleteTest);

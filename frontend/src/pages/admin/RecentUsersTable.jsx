@@ -10,14 +10,24 @@ const ROLE_LABELS = {
 
 function RecentUsersTable({ users = [], onRoleChanged }) {
   const [filter, setFilter] = useState("ALL"); // ALL | TEACHER | STUDENT
+  const [searchQuery, setSearchQuery] = useState("");
   const [changingId, setChangingId] = useState(null);
   const [error, setError] = useState("");
 
   const filteredUsers = useMemo(() => {
-    if (filter === "TEACHER") return users.filter((u) => u.role_code === "TEACHER");
-    if (filter === "STUDENT") return users.filter((u) => u.role_code === "STUDENT");
-    return users;
-  }, [users, filter]);
+    let list = users;
+    if (filter === "TEACHER") list = list.filter((u) => u.role_code === "TEACHER");
+    if (filter === "STUDENT") list = list.filter((u) => u.role_code === "STUDENT");
+    const q = (searchQuery || "").trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (u) =>
+          (u.full_name || "").toLowerCase().includes(q) ||
+          (u.email || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [users, filter, searchQuery]);
 
   const handleChangeRole = async (userId, currentRole) => {
     const newRole = currentRole === "TEACHER" ? "STUDENT" : "TEACHER";
@@ -47,8 +57,22 @@ function RecentUsersTable({ users = [], onRoleChanged }) {
     <div className="rounded-xl bg-white shadow-sm border border-slate-100 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-100">
         <h3 className="text-sm font-semibold text-slate-900">Danh sách người dùng</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Lọc:</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm theo tên, email..."
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm w-48"
+          />
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"
+          >
+            Xóa bộ lọc
+          </button>
+          <span className="text-xs text-slate-500">Lọc vai trò:</span>
           {["ALL", "TEACHER", "STUDENT"].map((f) => (
             <button
               key={f}

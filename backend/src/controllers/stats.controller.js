@@ -11,7 +11,11 @@ exports.getAdminStats = async (req, res) => {
 
 exports.getAdminRevenueDetail = async (req, res) => {
   try {
-    const data = await statsService.getAdminRevenueDetail();
+    const filters = {
+      course_id: req.query.course_id || null,
+      status: req.query.status || null,
+    };
+    const data = await statsService.getAdminRevenueDetail(filters);
     return res.json(data);
   } catch (e) {
     return res.status(500).json({ message: e.message });

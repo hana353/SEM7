@@ -136,6 +136,17 @@ module.exports = {
     }
   },
 
+  async teacherListTestAttempts(req, res) {
+    try {
+      const teacherId = req.user.id;
+      const testId = req.params.id;
+      const data = await testService.teacherListTestAttempts(teacherId, testId);
+      return res.json({ data });
+    } catch (e) {
+      return res.status(404).json({ message: e.message });
+    }
+  },
+
   async teacherUpdateTest(req, res) {
     try {
       const teacherId = req.user.id;

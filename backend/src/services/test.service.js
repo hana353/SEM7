@@ -267,6 +267,25 @@ module.exports = {
     };
   },
 
+  async teacherListTestAttempts(teacherId, testId) {
+    await poolConnect;
+    await assertTestOwnedByTeacher(teacherId, testId);
+
+    const rs = await pool
+      .request()
+      .input("test_id", sql.UniqueIdentifier, testId)
+      .query(`
+        SELECT a.id, a.student_id, a.started_at, a.submitted_at, a.status, a.score, a.max_score,
+               u.full_name AS student_name, u.email AS student_email
+        FROM test_attempts a
+        JOIN users u ON u.id = a.student_id
+        WHERE a.test_id = @test_id
+        ORDER BY a.submitted_at DESC, a.started_at DESC
+      `);
+
+    return rs.recordset || [];
+  },
+
   async teacherUpdateTest(teacherId, testId, payload) {
     await poolConnect;
     await assertTestOwnedByTeacher(teacherId, testId);

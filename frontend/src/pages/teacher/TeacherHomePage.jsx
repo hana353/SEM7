@@ -4,7 +4,6 @@ import { clearSession, getStoredUser } from "../../auth/session";
 import api from "../../api/axios";
 import SummaryCards from "./SummaryCards";
 import CoursesSection from "./CoursesSection";
-import LecturesSection from "./LecturesSection";
 import StudentsSection from "./StudentsSection";
 import RevenueSection from "./RevenueSection";
 import ProfileSection from "./ProfileSection";
@@ -12,7 +11,6 @@ import ProfileSection from "./ProfileSection";
 const sidebarItems = [
   { id: "dashboard", label: "Tổng quan" },
   { id: "myCourses", label: "Khóa học của tôi" },
-  { id: "lectures", label: "Bài giảng / Nội dung" },
   { id: "students", label: "Học viên của tôi" },
   { id: "revenue", label: "Doanh thu & rút tiền" },
   { id: "profile", label: "Hồ sơ giảng dạy" },
@@ -22,11 +20,9 @@ export default function TeacherHomePage() {
   const user = getStoredUser();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [assignedCourses, setAssignedCourses] = useState([]);
-  const [lectures, setLectures] = useState([]);
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState({});
   const [loadingCourses, setLoadingCourses] = useState(true);
-  const [loadingLectures, setLoadingLectures] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
 
@@ -35,10 +31,6 @@ export default function TeacherHomePage() {
       .then(res => setAssignedCourses(Array.isArray(res.data) ? res.data : []))
       .catch(() => setAssignedCourses([]))
       .finally(() => setLoadingCourses(false));
-    api.get("/lectures/teacher/all")
-      .then(res => setLectures(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setLectures([]))
-      .finally(() => setLoadingLectures(false));
     api.get("/enrollments/teacher/students")
       .then(res => setStudents(res.data?.data || []))
       .catch(() => setStudents([]))
@@ -70,10 +62,6 @@ export default function TeacherHomePage() {
       return <CoursesSection courses={assignedCourses} loading={loadingCourses} onCourseClick={handleCourseClick} />;
     }
 
-    if (activeSection === "lectures") {
-      return <LecturesSection lectures={lectures} loading={loadingLectures} onCourseClick={handleCourseClick} />;
-    }
-
     if (activeSection === "students") {
       return <StudentsSection students={students} loading={loadingStudents} />;
     }
@@ -97,7 +85,7 @@ export default function TeacherHomePage() {
             Teacher
           </p>
           <p className="mt-1 text-sm font-semibold truncate">
-            Teaching Management Workspace
+            Teaching Management
           </p>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-3 space-y-1 text-sm">
