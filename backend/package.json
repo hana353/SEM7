@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "demo": "PAYMENT_DEMO=true nodemon src/index.js"
+    "demo": "set PAYMENT_DEMO=true&& nodemon src/index.js"
   },
   "keywords": [],
   "author": "Tuan",
