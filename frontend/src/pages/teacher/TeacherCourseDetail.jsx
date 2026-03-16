@@ -180,6 +180,7 @@ function AddQuizModal({ courseId, onClose, onSuccess }) {
   const [questions, setQuestions] = useState([{ question: "", correct: "", wrong1: "", wrong2: "", wrong3: "" }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("DRAFT");
 
   const addQuestion = () => {
     setQuestions((q) => [...q, { question: "", correct: "", wrong1: "", wrong2: "", wrong3: "" }]);
@@ -212,7 +213,11 @@ function AddQuizModal({ courseId, onClose, onSuccess }) {
     }
     setSaving(true);
     try {
-      const quizRes = await api.post("/quizzes", { course_id: courseId, title: title.trim() });
+      const quizRes = await api.post("/quizzes", {
+        course_id: courseId,
+        title: title.trim(),
+        status,
+      });
       const quizId = quizRes.data?.data?.id;
       if (!quizId) throw new Error("Tạo quiz thất bại");
       for (let i = 0; i < valid.length; i++) {
@@ -251,6 +256,17 @@ function AddQuizModal({ courseId, onClose, onSuccess }) {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               placeholder="Ví dụ: Quiz từ vựng Bài 1"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+            >
+              <option value="DRAFT">Nháp (học sinh chưa thấy)</option>
+              <option value="PUBLISHED">Mở cho học sinh</option>
+            </select>
           </div>
           <div>
             <div className="flex justify-between items-center mb-2">
@@ -332,6 +348,7 @@ function AddQuizModal({ courseId, onClose, onSuccess }) {
 function AddTestModal({ courseId, onClose, onSuccess }) {
   const [title, setTitle] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(15);
+  const [status, setStatus] = useState("DRAFT");
   const [questions, setQuestions] = useState([
     { question: "", choices: [{ text: "", isCorrect: false }, { text: "", isCorrect: false }, { text: "", isCorrect: false }, { text: "", isCorrect: false }] },
   ]);
@@ -389,6 +406,7 @@ function AddTestModal({ courseId, onClose, onSuccess }) {
         course_id: courseId,
         title: title.trim(),
         duration_minutes: Number(durationMinutes) || 15,
+        status,
       });
       const testId = testRes.data?.data?.id;
       if (!testId) throw new Error("Tạo test thất bại");
@@ -447,6 +465,17 @@ function AddTestModal({ courseId, onClose, onSuccess }) {
                 onChange={(e) => setDurationMinutes(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+              >
+                <option value="DRAFT">Nháp (học sinh chưa thấy)</option>
+                <option value="PUBLISHED">Mở cho học sinh</option>
+              </select>
             </div>
           </div>
           <div>

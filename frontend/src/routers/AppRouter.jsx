@@ -8,6 +8,7 @@ import StudentHomePage from "../pages/student/StudentHomePage";
 import StudentCourseDetail from "../pages/student/StudentCourseDetail";
 import StudentQuizPage from "../pages/student/StudentQuizPage";
 import StudentTestAttemptPage from "../pages/student/StudentTestAttemptPage";
+import StudentTestReviewPage from "../pages/student/StudentTestReviewPage";
 import PaymentResult from "../pages/student/PaymentResult";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { getRoleCode } from "../auth/session";
@@ -29,6 +30,7 @@ export default function AppRouter() {
           <Route path="/student/course/:courseId" element={<StudentCourseDetail />} />
           <Route path="/student/quiz/:quizId" element={<StudentQuizPage />} />
           <Route path="/student/attempt/:attemptId" element={<StudentTestAttemptPage />} />
+          <Route path="/student/attempt/:attemptId/review" element={<StudentTestReviewPage />} />
           <Route path="/student/payment-result" element={<PaymentResult />} />
         </Route>
 

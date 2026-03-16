@@ -54,7 +54,7 @@ export default function StudentTestAttemptPage() {
     setSubmitting(true);
     try {
       await api.post(`/tests/attempts/${attemptId}/submit`);
-      navigate(-1);
+      navigate(`/student/attempt/${attemptId}/review`);
     } catch (e) {
       setError(e.response?.data?.message || "Nộp bài thất bại");
     } finally {

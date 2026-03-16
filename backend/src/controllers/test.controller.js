@@ -88,6 +88,17 @@ module.exports = {
     }
   },
 
+  async studentListMyAttempts(req, res) {
+    try {
+      const studentId = req.user.id;
+      const testId = req.params.id;
+      const data = await testService.studentListMyAttempts(studentId, testId);
+      return res.json({ data });
+    } catch (e) {
+      return res.status(400).json({ message: e.message });
+    }
+  },
+
   /* =========================
      TEACHER
   ========================= */

@@ -363,6 +363,19 @@ module.exports = {
     }));
   },
 
+  async studentListMyAttempts(studentId, testId) {
+    const { data, error } = await supabase
+      .from("test_attempts")
+      .select("id, started_at, submitted_at, status, score, max_score")
+      .eq("student_id", studentId)
+      .eq("test_id", testId)
+      .order("submitted_at", { ascending: false })
+      .order("started_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
   async teacherUpdateTest(teacherId, testId, payload) {
     await assertTestOwnedByTeacher(teacherId, testId);
 
@@ -870,7 +883,7 @@ module.exports = {
 
     const { data: test, error: testError } = await supabase
       .from("tests")
-      .select("id, title, description")
+      .select("id, course_id, title, description")
       .eq("id", attempt.test_id)
       .eq("is_deleted", false)
       .single();
@@ -902,6 +915,7 @@ module.exports = {
       attempt: {
         id: attempt.id,
         test_id: attempt.test_id,
+        course_id: test.course_id,
         started_at: attempt.started_at,
         submitted_at: attempt.submitted_at,
         status: attempt.status,

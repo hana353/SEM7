@@ -16,6 +16,7 @@ router.get("/attempts/:attemptId", requireAuth, requireRole("STUDENT"), controll
 router.post("/attempts/:attemptId/answers", requireAuth, requireRole("STUDENT"), controller.studentSaveAnswer);
 router.post("/attempts/:attemptId/submit", requireAuth, requireRole("STUDENT"), controller.studentSubmitAttempt);
 router.get("/attempts/:attemptId/review", requireAuth, requireRole("STUDENT"), controller.studentReviewAttempt);
+router.get("/:id/attempts/me", requireAuth, requireRole("STUDENT"), controller.studentListMyAttempts);
 
 /* =========================
    TEACHER

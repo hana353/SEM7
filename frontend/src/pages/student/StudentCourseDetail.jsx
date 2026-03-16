@@ -25,6 +25,9 @@ export default function StudentCourseDetail() {
   const [purchaseError, setPurchaseError] = useState("");
   const [purchaseMessage, setPurchaseMessage] = useState("");
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [testHistoryFor, setTestHistoryFor] = useState(null);
+  const [testHistory, setTestHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const refreshTab = () => {
     if (!courseId) return;
@@ -46,6 +49,21 @@ export default function StudentCourseDetail() {
         .get(`/tests?course_id=${courseId}`)
         .then(res => setTests(res.data?.data || []))
         .catch(() => setTests([]));
+    }
+  };
+
+  const openTestHistory = async (testId) => {
+    setTestHistoryFor(testId);
+    setLoadingHistory(true);
+    setTestHistory([]);
+    try {
+      const res = await api.get(`/tests/${testId}/attempts/me`);
+      setTestHistory(res.data?.data || []);
+    } catch (err) {
+      console.error(err);
+      setTestHistory([]);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -325,28 +343,95 @@ export default function StudentCourseDetail() {
                           Thời lượng: {t.duration_minutes || 0} phút
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500"
-                        onClick={async () => {
-                          try {
-                            const res = await api.post(`/tests/${t.id}/attempts`);
-                            const attemptId = res.data?.data?.id;
-                            if (attemptId) navigate(`/student/attempt/${attemptId}`);
-                            else setError("Không thể bắt đầu làm bài");
-                          } catch (err) {
-                            setError(err.response?.data?.message || "Không thể bắt đầu làm bài");
-                          }
-                        }}
-                      >
-                        Làm test
-                      </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500"
+                      onClick={async () => {
+                        try {
+                          const res = await api.post(`/tests/${t.id}/attempts`);
+                          const attemptId = res.data?.data?.id;
+                          if (attemptId) navigate(`/student/attempt/${attemptId}`);
+                          else setError("Không thể bắt đầu làm bài");
+                        } catch (err) {
+                          setError(err.response?.data?.message || "Không thể bắt đầu làm bài");
+                        }
+                      }}
+                    >
+                      Làm test
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
+                      onClick={() => openTestHistory(t.id)}
+                    >
+                      Lịch sử làm
+                    </button>
+                  </div>
                     </li>
                   ))}
                 </ul>
               )}
             </section>
           )}
+        </div>
+      )}
+      {testHistoryFor && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-900">Lịch sử làm bài test</h3>
+              <button
+                type="button"
+                className="text-xs text-slate-500 hover:text-slate-700"
+                onClick={() => {
+                  setTestHistoryFor(null);
+                  setTestHistory([]);
+                }}
+              >
+                Đóng
+              </button>
+            </div>
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
+              {loadingHistory ? (
+                <p className="text-sm text-slate-500">Đang tải lịch sử…</p>
+              ) : testHistory.length === 0 ? (
+                <p className="text-sm text-slate-500">Bạn chưa có lần làm nào cho bài test này.</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {testHistory.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2"
+                    >
+                      <div>
+                        <p className="text-xs text-slate-500">
+                          Nộp lúc: {a.submitted_at ? new Date(a.submitted_at).toLocaleString("vi-VN") : "—"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Trạng thái: {a.status}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-800">
+                          {a.score != null && a.max_score != null ? `${a.score}/${a.max_score}` : "Chưa có điểm"}
+                        </span>
+                        {["SUBMITTED", "GRADED"].includes(a.status) && (
+                          <button
+                            type="button"
+                            className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800"
+                            onClick={() => navigate(`/student/attempt/${a.id}/review`)}
+                          >
+                            Xem chi tiết
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
