@@ -15,7 +15,7 @@ const sidebarItems = [
   { id: "courses", label: "Khóa học" },
   { id: "vocab", label: "Bộ từ vựng (Free)" },
   { id: "reports", label: "Doanh thu" },
-  { id: "settings", label: "Cài đặt" },
+  // { id: "settings", label: "Cài đặt" },
 ];
 export default function AdminHomePage() {
   const navigate = useNavigate();
