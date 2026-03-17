@@ -74,6 +74,27 @@ const getSpeechRecognition = () => {
   return new SpeechRecognition();
 };
 
+const blobToBase64 = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const res = String(reader.result || "");
+      const commaIdx = res.indexOf(",");
+      resolve(commaIdx >= 0 ? res.slice(commaIdx + 1) : res);
+    };
+    reader.readAsDataURL(blob);
+  });
+
+const speakText = (text, lang = "en-US") => {
+  if (typeof window === "undefined") return;
+  if (!("speechSynthesis" in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = lang;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
+};
+
 const VocabularyPractice = () => {
   const [topics, setTopics] = useState([]);
   const [loadingTopics, setLoadingTopics] = useState(true);
@@ -85,6 +106,8 @@ const VocabularyPractice = () => {
   const [speechSupported] = useState(() => !!getSpeechRecognition());
   const [lastResult, setLastResult] = useState("");
   const [status, setStatus] = useState("");
+  const [useGemini, setUseGemini] = useState(true);
+  const [echoResult, setEchoResult] = useState(false);
   const [remindWords, setRemindWords] = useState([]);
   const [loadingRemind, setLoadingRemind] = useState(false);
   const [showCongrats, setShowCongrats] = useState(false);
@@ -134,7 +157,51 @@ const VocabularyPractice = () => {
     setLastResult("");
   };
 
-  const startListening = () => {
+  const gradeSpoken = async (transcript) => {
+    const t = String(transcript || "").trim();
+    setLastResult(t);
+
+    const spoken = t.toLowerCase();
+    const target = (currentWord?.word || "").trim().toLowerCase();
+    const passed = spoken === target;
+    setStatus(
+      passed
+        ? "Chính xác! Bạn đã đọc đúng, chuyển sang từ tiếp theo."
+        : "Chưa chính xác, hãy thử lại."
+    );
+
+    if (echoResult && t) speakText(t, "en-US");
+
+    const accuracyPercent = passed ? 100 : 0;
+    try {
+      await api.post("/vocabulary/practice", {
+        vocabularyId: currentWord.id,
+        spokenText: t,
+        accuracyPercent,
+      });
+    } catch {
+      // ignore logging error on client
+    }
+
+    if (passed) {
+      const isLastWord = currentIndex === words.length - 1;
+      if (isLastWord) {
+        setTimeout(() => {
+          setShowCongrats(true);
+          setTimeout(() => {
+            setShowCongrats(false);
+            handleNext();
+          }, 3000);
+        }, 2500);
+      } else {
+        setTimeout(() => {
+          handleNext();
+        }, 2500);
+      }
+    }
+  };
+
+  const startListeningBrowser = () => {
     if (!speechSupported || !currentWord) return;
     const recognition = getSpeechRecognition();
     if (!recognition) return;
@@ -159,47 +226,84 @@ const VocabularyPractice = () => {
 
     recognition.onresult = async (event) => {
       const transcript = event.results[0][0].transcript.trim();
-      setLastResult(transcript);
-
-      const spoken = transcript.toLowerCase();
-      const target = (currentWord.word || "").trim().toLowerCase();
-      const passed = spoken === target;
-      setStatus(
-        passed
-          ? "Chính xác! Bạn đã đọc đúng, chuyển sang từ tiếp theo."
-          : "Chưa chính xác, hãy thử lại."
-      );
-
-      const accuracyPercent = passed ? 100 : 0;
-      try {
-        await api.post("/vocabulary/practice", {
-          vocabularyId: currentWord.id,
-          spokenText: transcript,
-          accuracyPercent,
-        });
-      } catch {
-        // ignore logging error on client
-      }
-
-      if (passed) {
-        const isLastWord = currentIndex === words.length - 1;
-        if (isLastWord) {
-          setTimeout(() => {
-            setShowCongrats(true);
-            setTimeout(() => {
-              setShowCongrats(false);
-              handleNext();
-            }, 3000);
-          }, 2500);
-        } else {
-          setTimeout(() => {
-            handleNext();
-          }, 2500);
-        }
-      }
+      await gradeSpoken(transcript);
     };
 
     recognition.start();
+  };
+
+  const startListeningGemini = async () => {
+    if (!currentWord) return;
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setStatus("Thiết bị/trình duyệt không hỗ trợ thu âm (getUserMedia).");
+      return;
+    }
+
+    setIsListening(true);
+    setStatus("Đang thu âm (Gemini)...");
+    setLastResult("");
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const options = {};
+      const recorder = new MediaRecorder(stream, options);
+      const chunks = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      const stopped = new Promise((resolve) => {
+        recorder.onstop = resolve;
+      });
+
+      recorder.start();
+      setStatus("Đang thu âm (Gemini)... hãy đọc từ tiếng Anh hiển thị.");
+
+      setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+      }, 2500);
+
+      await stopped;
+
+      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      const audioBase64 = await blobToBase64(blob);
+
+      setStatus("Đang gửi audio lên AI (Gemini) để chuyển thành text...");
+      const res = await api.post("/speech/transcribe", {
+        audioBase64,
+        mimeType: blob.type,
+        language: "en",
+      });
+      const transcript = res.data?.data?.text || "";
+      await gradeSpoken(transcript);
+    } catch (e) {
+      const retryAfter = e?.response?.data?.retryAfterSeconds;
+      const msg =
+        e?.response?.data?.message ||
+        e?.message ||
+        "unknown";
+      if (retryAfter) {
+        setStatus(
+          `Gemini đang bị giới hạn quota/rate-limit. Vui lòng thử lại sau ~${retryAfter}s, hoặc tắt "Dùng Gemini AI (backend)" để dùng voice-to-text của trình duyệt.`
+        );
+      } else {
+        setStatus(`Lỗi khi dùng Gemini voice-to-text: ${msg}`);
+      }
+    } finally {
+      setIsListening(false);
+      try {
+        stream?.getTracks?.().forEach((t) => t.stop());
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const startListening = () => {
+    if (useGemini) return startListeningGemini();
+    return startListeningBrowser();
   };
 
   const fetchRemindWords = () => {
@@ -373,6 +477,24 @@ const VocabularyPractice = () => {
               <p className="text-xs font-semibold text-gray-700">
                 Luyện phát âm (voice-to-text)
               </p>
+              <div className="mt-2 flex flex-wrap gap-3 items-center text-xs text-gray-600">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={useGemini}
+                    onChange={(e) => setUseGemini(e.target.checked)}
+                  />
+                  Dùng Gemini AI (backend)
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={echoResult}
+                    onChange={(e) => setEchoResult(e.target.checked)}
+                  />
+                  Đọc lại kết quả (text-to-speech)
+                </label>
+              </div>
               {!speechSupported && (
                 <p className="text-xs text-red-500 mt-1">
                   Trình duyệt của bạn chưa hỗ trợ Web Speech API. Bạn có thể mô
@@ -411,23 +533,25 @@ const VocabularyPractice = () => {
 
             <button
               type="button"
-              disabled={!speechSupported || !currentWord || isListening}
+              disabled={!currentWord || isListening || (!useGemini && !speechSupported)}
               onClick={startListening}
               className={`px-4 py-2 rounded-lg text-xs font-semibold shadow-sm ${
-                !speechSupported || !currentWord
+                !currentWord || (!useGemini && !speechSupported)
                   ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                   : isListening
                     ? "bg-red-500 text-white"
                     : "bg-blue-600 text-white hover:bg-blue-500"
               }`}
             >
-              {!speechSupported
-                ? "Không hỗ trợ voice-to-text"
-                : !currentWord
-                  ? "Chọn chủ đề & từ"
-                  : isListening
-                    ? "Đang nghe..."
-                    : "Bắt đầu đọc"}
+              {!currentWord
+                ? "Chọn chủ đề & từ"
+                : isListening
+                  ? "Đang xử lý..."
+                  : useGemini
+                    ? "Bắt đầu (Gemini)"
+                    : !speechSupported
+                      ? "Không hỗ trợ voice-to-text"
+                      : "Bắt đầu (Browser)"}
             </button>
           </div>
         </section>

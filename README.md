@@ -8,6 +8,13 @@ npm install
 3. Khởi chạy: Nhập lệnh để chạy giao diện web trên môi trường local:
 npm start (Sau đó truy cập địa chỉ http://localhost:5173 trên trình duyệt).
 
+---
+
+TÍCH HỢP AI (GEMINI - VOICE TO TEXT)
+- Backend có endpoint: `POST /api/speech/transcribe`
+- Cần set biến môi trường ở `backend/.env`:
+  - `GEMINI_API_KEY=YOUR_KEY_HERE`
+
 
 Tài khoản Admin:     admin@gmail.com              Mật khẩu: 123456
 Tài khoản Student:   student1@gmail.com           Mật khẩu: 123456
