@@ -19,6 +19,7 @@ DROP TABLE IF EXISTS courses CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS otp_codes CASCADE;
 
 CREATE TABLE roles (
   id SMALLINT PRIMARY KEY,
@@ -46,8 +47,6 @@ CREATE TABLE users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- bcrypt hash cho mật khẩu: 123456
--- có thể dùng cho tất cả tài khoản test
 DO $$
 DECLARE
   pwd_hash TEXT := '$2b$10$LNzoIv2eFrFlYvWXTm9mDO0CTB83ZFAsOt5ugjj7vAfSaWLFVLx62';
@@ -227,6 +226,7 @@ CREATE TABLE payments (
   gateway_response TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
 DO $$
 DECLARE
   i INT := 1;
@@ -333,7 +333,6 @@ BEGIN
   END LOOP;
 END $$;
 
--- Flashcards (replacing "quiz" feature)
 CREATE TABLE flashcard_sets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id UUID NOT NULL REFERENCES users(id),
@@ -343,7 +342,7 @@ CREATE TABLE flashcard_sets (
   status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE flashcard_cards (
@@ -439,7 +438,6 @@ CREATE INDEX idx_test_questions_test ON test_questions(test_id);
 CREATE INDEX idx_test_choices_question ON test_choices(question_id);
 CREATE INDEX idx_test_attempts_test_student ON test_attempts(test_id, student_id);
 
-
 UPDATE users
 SET password_hash = '$2b$10$LNzoIv2eFrFlYvWXTm9mDO0CTB83ZFAsOt5ugjj7vAfSaWLFVLx62',
     is_verified = TRUE,
@@ -450,7 +448,6 @@ SET password_hash = '$2b$10$LNzoIv2eFrFlYvWXTm9mDO0CTB83ZFAsOt5ugjj7vAfSaWLFVLx6
 SELECT email, password_hash, is_verified, is_active, is_deleted
 FROM users
 WHERE email = 'admin@gmail.com';
-
 
 CREATE TABLE otp_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -465,7 +462,6 @@ CREATE TABLE otp_codes (
 CREATE INDEX idx_otp_codes_email_type ON otp_codes(email, type);
 CREATE INDEX idx_otp_codes_created_at ON otp_codes(created_at DESC);
 
--- Teacher notifications (for enrollments + lecture approvals, filterable by type)
 CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -494,3 +490,567 @@ ALTER TABLE notifications
 CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at DESC);
 CREATE INDEX idx_notifications_user_type_created ON notifications(user_id, type, created_at DESC);
 CREATE INDEX idx_notifications_search ON notifications USING GIN(search_vector);
+
+-- Seed thêm lectures
+INSERT INTO lectures (
+  course_id, teacher_id, title, video_url, duration_minutes, order_index,
+  status, submitted_at, approved_by, approved_at
+)
+SELECT
+  c.id, c.teacher_id, 'Speaking Part 1 Introduction', 'https://youtube.com/ielts-speaking-1', 18, 1,
+  'APPROVED_PUBLIC', NOW() - INTERVAL '20 days', a.id, NOW() - INTERVAL '18 days'
+FROM courses c
+JOIN users a ON a.email = 'admin@gmail.com'
+WHERE c.title = 'IELTS Speaking Mastery';
+
+INSERT INTO lectures (
+  course_id, teacher_id, title, video_url, duration_minutes, order_index,
+  status, submitted_at
+)
+SELECT
+  c.id, c.teacher_id, 'Speaking Part 2 Long Turn', 'https://youtube.com/ielts-speaking-2', 22, 2,
+  'PENDING_APPROVAL', NOW() - INTERVAL '2 days'
+FROM courses c
+WHERE c.title = 'IELTS Speaking Mastery';
+
+INSERT INTO lectures (
+  course_id, teacher_id, title, video_url, duration_minutes, order_index,
+  status, submitted_at, approved_by, approved_at
+)
+SELECT
+  c.id, c.teacher_id, 'Small Talk in Daily Life', 'https://youtube.com/daily-conversation-1', 15, 1,
+  'APPROVED_PUBLIC', NOW() - INTERVAL '14 days', a.id, NOW() - INTERVAL '13 days'
+FROM courses c
+JOIN users a ON a.email = 'admin@gmail.com'
+WHERE c.title = 'Daily English Conversation';
+
+INSERT INTO lectures (
+  course_id, teacher_id, title, video_url, duration_minutes, order_index,
+  status, submitted_at, rejection_reason
+)
+SELECT
+  c.id, c.teacher_id, 'Ordering Coffee Naturally', 'https://youtube.com/daily-conversation-2', 14, 2,
+  'REJECTED', NOW() - INTERVAL '5 days', 'Audio quality is too low, please re-upload a clearer version.'
+FROM courses c
+WHERE c.title = 'Daily English Conversation';
+
+INSERT INTO lectures (
+  course_id, teacher_id, title, video_url, duration_minutes, order_index,
+  status, submitted_at, approved_by, approved_at
+)
+SELECT
+  c.id, c.teacher_id, 'Professional Email Writing', 'https://youtube.com/business-english-1', 20, 1,
+  'APPROVED_PUBLIC', NOW() - INTERVAL '11 days', a.id, NOW() - INTERVAL '10 days'
+FROM courses c
+JOIN users a ON a.email = 'admin@gmail.com'
+WHERE c.title = 'Business English';
+
+INSERT INTO lectures (
+  course_id, teacher_id, title, video_url, duration_minutes, order_index, status
+)
+SELECT
+  c.id, c.teacher_id, 'Meeting Vocabulary Basics', 'https://youtube.com/business-english-2', 17, 2, 'DRAFT'
+FROM courses c
+WHERE c.title = 'Business English';
+
+-- Seed thêm vocabularies
+INSERT INTO vocabularies(topic_id, word, meaning, example_sentence)
+SELECT id, 'menu', 'thực đơn', 'Can I see the menu, please?'
+FROM vocabulary_topics
+WHERE title = 'Food';
+
+INSERT INTO vocabularies(topic_id, word, meaning, example_sentence)
+SELECT id, 'noodles', 'mì', 'I would like a bowl of noodles.'
+FROM vocabulary_topics
+WHERE title = 'Food';
+
+INSERT INTO vocabularies(topic_id, word, meaning, example_sentence)
+SELECT id, 'passport', 'hộ chiếu', 'Please show your passport at check-in.'
+FROM vocabulary_topics
+WHERE title = 'Travel';
+
+INSERT INTO vocabularies(topic_id, word, meaning, example_sentence)
+SELECT id, 'hotel', 'khách sạn', 'We stayed at a small hotel near the beach.'
+FROM vocabulary_topics
+WHERE title = 'Travel';
+
+INSERT INTO vocabularies(topic_id, word, meaning, example_sentence)
+SELECT id, 'reservation', 'đặt chỗ', 'I made a reservation for dinner.'
+FROM vocabulary_topics
+WHERE title = 'Daily Conversation';
+
+INSERT INTO vocabularies(topic_id, word, meaning, example_sentence)
+SELECT id, 'introduce', 'giới thiệu', 'Let me introduce myself.'
+FROM vocabulary_topics
+WHERE title = 'Daily Conversation';
+
+-- Seed flashcard_sets
+INSERT INTO flashcard_sets (teacher_id, course_id, title, description, status, is_deleted)
+SELECT c.teacher_id, c.id, 'Beginner Alphabet Cards', 'Basic alphabet and pronunciation', 'PUBLISHED', FALSE
+FROM courses c
+WHERE c.title = 'English for Beginners';
+
+INSERT INTO flashcard_sets (teacher_id, course_id, title, description, status, is_deleted)
+SELECT c.teacher_id, c.id, 'Daily Conversation Starter Pack', 'Useful phrases for common situations', 'PUBLISHED', FALSE
+FROM courses c
+WHERE c.title = 'Daily English Conversation';
+
+INSERT INTO flashcard_sets (teacher_id, course_id, title, description, status, is_deleted)
+SELECT c.teacher_id, c.id, 'Business Meeting Vocabulary', 'Key vocabulary used in meetings', 'DRAFT', FALSE
+FROM courses c
+WHERE c.title = 'Business English';
+
+-- Seed flashcard_cards
+INSERT INTO flashcard_cards (flashcard_set_id, front_text, back_text, position)
+SELECT fs.id, x.front_text, x.back_text, x.position
+FROM flashcard_sets fs
+JOIN (
+  VALUES
+    ('A', 'A - Apple', 1),
+    ('B', 'B - Book', 2),
+    ('C', 'C - Cat', 3),
+    ('D', 'D - Dog', 4),
+    ('E', 'E - Elephant', 5)
+) AS x(front_text, back_text, position) ON TRUE
+WHERE fs.title = 'Beginner Alphabet Cards';
+
+INSERT INTO flashcard_cards (flashcard_set_id, front_text, back_text, position)
+SELECT fs.id, x.front_text, x.back_text, x.position
+FROM flashcard_sets fs
+JOIN (
+  VALUES
+    ('How are you?', 'I am fine, thank you.', 1),
+    ('Nice to meet you.', 'Rất vui được gặp bạn.', 2),
+    ('What do you do?', 'Bạn làm nghề gì?', 3),
+    ('Could you help me?', 'Bạn có thể giúp tôi không?', 4),
+    ('See you later.', 'Hẹn gặp lại sau.', 5)
+) AS x(front_text, back_text, position) ON TRUE
+WHERE fs.title = 'Daily Conversation Starter Pack';
+
+INSERT INTO flashcard_cards (flashcard_set_id, front_text, back_text, position)
+SELECT fs.id, x.front_text, x.back_text, x.position
+FROM flashcard_sets fs
+JOIN (
+  VALUES
+    ('Agenda', 'Chương trình cuộc họp', 1),
+    ('Deadline', 'Hạn chót', 2),
+    ('Follow up', 'Theo dõi / phản hồi sau', 3),
+    ('Minutes', 'Biên bản cuộc họp', 4),
+    ('Proposal', 'Đề xuất', 5)
+) AS x(front_text, back_text, position) ON TRUE
+WHERE fs.title = 'Business Meeting Vocabulary';
+
+-- Seed tests
+INSERT INTO tests (
+  teacher_id, course_id, title, description, duration_minutes, max_attempts,
+  shuffle_questions, shuffle_choices, status, open_at, close_at, is_deleted
+)
+SELECT
+  c.teacher_id,
+  c.id,
+  'English Basics Quiz',
+  'Quiz for beginner students',
+  15,
+  3,
+  TRUE,
+  TRUE,
+  'PUBLISHED',
+  NOW() - INTERVAL '30 days',
+  NOW() + INTERVAL '90 days',
+  FALSE
+FROM courses c
+WHERE c.title = 'English for Beginners';
+
+INSERT INTO tests (
+  teacher_id, course_id, title, description, duration_minutes, max_attempts,
+  shuffle_questions, shuffle_choices, status, open_at, close_at, is_deleted
+)
+SELECT
+  c.teacher_id,
+  c.id,
+  'IELTS Speaking Concepts Check',
+  'Basic understanding before speaking practice',
+  20,
+  2,
+  FALSE,
+  TRUE,
+  'PUBLISHED',
+  NOW() - INTERVAL '20 days',
+  NOW() + INTERVAL '60 days',
+  FALSE
+FROM courses c
+WHERE c.title = 'IELTS Speaking Mastery';
+
+INSERT INTO tests (
+  teacher_id, course_id, title, description, duration_minutes, max_attempts,
+  shuffle_questions, shuffle_choices, status, open_at, close_at, is_deleted
+)
+SELECT
+  c.teacher_id,
+  c.id,
+  'Daily Conversation Mini Test',
+  'Short test on common communication phrases',
+  10,
+  3,
+  TRUE,
+  TRUE,
+  'PUBLISHED',
+  NOW() - INTERVAL '15 days',
+  NOW() + INTERVAL '45 days',
+  FALSE
+FROM courses c
+WHERE c.title = 'Daily English Conversation';
+
+-- Seed test_questions
+INSERT INTO test_questions (test_id, question_text, points, position, is_deleted)
+SELECT t.id, x.question_text, x.points, x.position, FALSE
+FROM tests t
+JOIN (
+  VALUES
+    ('Which word is a greeting?', 1, 1),
+    ('Choose the correct article: ___ apple', 1, 2),
+    ('Which sentence is correct?', 1, 3)
+) AS x(question_text, points, position) ON TRUE
+WHERE t.title = 'English Basics Quiz';
+
+INSERT INTO test_questions (test_id, question_text, points, position, is_deleted)
+SELECT t.id, x.question_text, x.points, x.position, FALSE
+FROM tests t
+JOIN (
+  VALUES
+    ('How long is IELTS Speaking Part 2 preparation time?', 1, 1),
+    ('What is important in IELTS Speaking assessment?', 1, 2),
+    ('Which is a good way to improve fluency?', 1, 3)
+) AS x(question_text, points, position) ON TRUE
+WHERE t.title = 'IELTS Speaking Concepts Check';
+
+INSERT INTO test_questions (test_id, question_text, points, position, is_deleted)
+SELECT t.id, x.question_text, x.points, x.position, FALSE
+FROM tests t
+JOIN (
+  VALUES
+    ('What do you say when meeting someone for the first time?', 1, 1),
+    ('Which phrase is used to ask for help politely?', 1, 2),
+    ('What does "See you later" mean?', 1, 3)
+) AS x(question_text, points, position) ON TRUE
+WHERE t.title = 'Daily Conversation Mini Test';
+
+-- Seed test_choices
+INSERT INTO test_choices (question_id, choice_text, is_correct, position, is_deleted)
+SELECT q.id, x.choice_text, x.is_correct, x.position, FALSE
+FROM test_questions q
+JOIN tests t ON t.id = q.test_id
+JOIN (
+  VALUES
+    ('Which word is a greeting?', 'Hello', TRUE, 1),
+    ('Which word is a greeting?', 'Table', FALSE, 2),
+    ('Which word is a greeting?', 'Apple', FALSE, 3),
+    ('Which word is a greeting?', 'Window', FALSE, 4),
+
+    ('Choose the correct article: ___ apple', 'a', FALSE, 1),
+    ('Choose the correct article: ___ apple', 'an', TRUE, 2),
+    ('Choose the correct article: ___ apple', 'the', FALSE, 3),
+    ('Choose the correct article: ___ apple', 'no article', FALSE, 4),
+
+    ('Which sentence is correct?', 'She go to school every day.', FALSE, 1),
+    ('Which sentence is correct?', 'She goes to school every day.', TRUE, 2),
+    ('Which sentence is correct?', 'She going to school every day.', FALSE, 3),
+    ('Which sentence is correct?', 'She gone to school every day.', FALSE, 4)
+) AS x(question_text, choice_text, is_correct, position)
+  ON x.question_text = q.question_text
+WHERE t.title = 'English Basics Quiz';
+
+INSERT INTO test_choices (question_id, choice_text, is_correct, position, is_deleted)
+SELECT q.id, x.choice_text, x.is_correct, x.position, FALSE
+FROM test_questions q
+JOIN tests t ON t.id = q.test_id
+JOIN (
+  VALUES
+    ('How long is IELTS Speaking Part 2 preparation time?', '30 seconds', FALSE, 1),
+    ('How long is IELTS Speaking Part 2 preparation time?', '1 minute', TRUE, 2),
+    ('How long is IELTS Speaking Part 2 preparation time?', '2 minutes', FALSE, 3),
+    ('How long is IELTS Speaking Part 2 preparation time?', '5 minutes', FALSE, 4),
+
+    ('What is important in IELTS Speaking assessment?', 'Grammar only', FALSE, 1),
+    ('What is important in IELTS Speaking assessment?', 'Fluency, vocabulary, grammar, pronunciation', TRUE, 2),
+    ('What is important in IELTS Speaking assessment?', 'Writing speed', FALSE, 3),
+    ('What is important in IELTS Speaking assessment?', 'Spelling only', FALSE, 4),
+
+    ('Which is a good way to improve fluency?', 'Memorize one answer only', FALSE, 1),
+    ('Which is a good way to improve fluency?', 'Practice speaking regularly', TRUE, 2),
+    ('Which is a good way to improve fluency?', 'Avoid speaking English', FALSE, 3),
+    ('Which is a good way to improve fluency?', 'Only study grammar rules', FALSE, 4)
+) AS x(question_text, choice_text, is_correct, position)
+  ON x.question_text = q.question_text
+WHERE t.title = 'IELTS Speaking Concepts Check';
+
+INSERT INTO test_choices (question_id, choice_text, is_correct, position, is_deleted)
+SELECT q.id, x.choice_text, x.is_correct, x.position, FALSE
+FROM test_questions q
+JOIN tests t ON t.id = q.test_id
+JOIN (
+  VALUES
+    ('What do you say when meeting someone for the first time?', 'Nice to meet you', TRUE, 1),
+    ('What do you say when meeting someone for the first time?', 'Good night', FALSE, 2),
+    ('What do you say when meeting someone for the first time?', 'I am sleeping', FALSE, 3),
+    ('What do you say when meeting someone for the first time?', 'Close the door', FALSE, 4),
+
+    ('Which phrase is used to ask for help politely?', 'Help me now!', FALSE, 1),
+    ('Which phrase is used to ask for help politely?', 'Could you help me?', TRUE, 2),
+    ('Which phrase is used to ask for help politely?', 'You must help me.', FALSE, 3),
+    ('Which phrase is used to ask for help politely?', 'I order you to help.', FALSE, 4),
+
+    ('What does "See you later" mean?', 'Tôi sẽ gặp bạn sau', TRUE, 1),
+    ('What does "See you later" mean?', 'Tôi không biết bạn', FALSE, 2),
+    ('What does "See you later" mean?', 'Đi ngủ ngay', FALSE, 3),
+    ('What does "See you later" mean?', 'Đóng cửa lại', FALSE, 4)
+) AS x(question_text, choice_text, is_correct, position)
+  ON x.question_text = q.question_text
+WHERE t.title = 'Daily Conversation Mini Test';
+
+-- Seed test_attempts submitted
+DO $$
+DECLARE
+  rec RECORD;
+  chosen_student UUID;
+  v_started_at TIMESTAMPTZ;
+  v_submitted_at TIMESTAMPTZ;
+  v_expires_at TIMESTAMPTZ;
+BEGIN
+  FOR rec IN
+    SELECT t.id AS test_id, t.course_id, t.duration_minutes
+    FROM tests t
+    WHERE t.status = 'PUBLISHED'
+  LOOP
+    FOR chosen_student IN
+      SELECT e.student_id
+      FROM enrollments e
+      WHERE e.course_id = rec.course_id
+      ORDER BY RANDOM()
+      LIMIT 12
+    LOOP
+      v_started_at := NOW() - ((10 + floor(random() * 20))::text || ' days')::interval;
+      v_expires_at := v_started_at + ((COALESCE(rec.duration_minutes, 10) * 60)::text || ' seconds')::interval;
+      v_submitted_at := v_started_at + ((5 + floor(random() * GREATEST(COALESCE(rec.duration_minutes, 10) - 1, 5)))::text || ' minutes')::interval;
+
+      INSERT INTO test_attempts (
+        test_id, student_id, attempt_no, started_at, submitted_at,
+        time_limit_seconds, expires_at, auto_submitted, status, score, max_score
+      )
+      VALUES (
+        rec.test_id,
+        chosen_student,
+        1,
+        v_started_at,
+        v_submitted_at,
+        COALESCE(rec.duration_minutes, 10) * 60,
+        v_expires_at,
+        FALSE,
+        'SUBMITTED',
+        NULL,
+        NULL
+      )
+      ON CONFLICT (test_id, student_id, attempt_no) DO NOTHING;
+    END LOOP;
+  END LOOP;
+END $$;
+
+-- Seed test_attempt_answers
+INSERT INTO test_attempt_answers (attempt_id, question_id, choice_id, is_correct, points_earned)
+SELECT
+  ta.id,
+  q.id,
+  chosen.choice_id,
+  chosen.is_correct,
+  CASE WHEN chosen.is_correct THEN q.points ELSE 0 END
+FROM test_attempts ta
+JOIN tests t ON t.id = ta.test_id
+JOIN test_questions q ON q.test_id = t.id
+JOIN LATERAL (
+  SELECT tc.id AS choice_id, tc.is_correct
+  FROM test_choices tc
+  WHERE tc.question_id = q.id
+  ORDER BY RANDOM()
+  LIMIT 1
+) chosen ON TRUE
+WHERE ta.status = 'SUBMITTED'
+ON CONFLICT (attempt_id, question_id) DO NOTHING;
+
+-- Update score / max_score
+UPDATE test_attempts ta
+SET
+  score = s.total_score,
+  max_score = s.total_max
+FROM (
+  SELECT
+    ta2.id AS attempt_id,
+    COALESCE(SUM(taa.points_earned), 0) AS total_score,
+    COALESCE(SUM(q.points), 0) AS total_max
+  FROM test_attempts ta2
+  LEFT JOIN test_attempt_answers taa ON taa.attempt_id = ta2.id
+  LEFT JOIN test_questions q ON q.id = taa.question_id
+  GROUP BY ta2.id
+) s
+WHERE ta.id = s.attempt_id;
+
+-- Seed attempt đang làm dở
+DO $$
+DECLARE
+  rec RECORD;
+  v_started_at TIMESTAMPTZ;
+BEGIN
+  FOR rec IN
+    SELECT t.id AS test_id, e.student_id, t.duration_minutes
+    FROM tests t
+    JOIN enrollments e ON e.course_id = t.course_id
+    WHERE t.status = 'PUBLISHED'
+    ORDER BY RANDOM()
+    LIMIT 5
+  LOOP
+    v_started_at := NOW() - INTERVAL '5 minutes';
+
+    INSERT INTO test_attempts (
+      test_id, student_id, attempt_no, started_at, submitted_at,
+      time_limit_seconds, expires_at, auto_submitted, status, score, max_score
+    )
+    VALUES (
+      rec.test_id,
+      rec.student_id,
+      2,
+      v_started_at,
+      NULL,
+      COALESCE(rec.duration_minutes, 10) * 60,
+      v_started_at + ((COALESCE(rec.duration_minutes, 10) * 60)::text || ' seconds')::interval,
+      FALSE,
+      'IN_PROGRESS',
+      NULL,
+      NULL
+    )
+    ON CONFLICT (test_id, student_id, attempt_no) DO NOTHING;
+  END LOOP;
+END $$;
+
+-- Seed otp_codes
+INSERT INTO otp_codes (email, code, type, expires_at, used_at, created_at)
+VALUES
+  ('student1@gmail.com', '123456', 'register', NOW() + INTERVAL '10 minutes', NULL, NOW() - INTERVAL '1 minute'),
+  ('student2@gmail.com', '654321', 'forgot_password', NOW() + INTERVAL '8 minutes', NULL, NOW() - INTERVAL '2 minutes'),
+  ('teacher1@gmail.com', '111222', 'register', NOW() - INTERVAL '1 minute', NULL, NOW() - INTERVAL '6 minutes'),
+  ('teacher2@gmail.com', '333444', 'forgot_password', NOW() + INTERVAL '5 minutes', NOW() - INTERVAL '1 minute', NOW() - INTERVAL '4 minutes'),
+  ('newuser@gmail.com', '555666', 'register', NOW() + INTERVAL '15 minutes', NULL, NOW());
+
+-- Seed notifications
+INSERT INTO notifications (user_id, type, title, body, metadata, is_read, read_at, created_at)
+SELECT
+  c.teacher_id,
+  'ENROLLMENT_NEW',
+  'New student enrollment',
+  u.full_name || ' enrolled in course "' || c.title || '".',
+  jsonb_build_object(
+    'student_id', u.id,
+    'student_email', u.email,
+    'course_id', c.id,
+    'course_title', c.title,
+    'enrollment_id', e.id
+  ),
+  s.is_read_value,
+  CASE
+    WHEN s.is_read_value THEN e.enrolled_at + (random() * INTERVAL '3 days')
+    ELSE NULL
+  END,
+  e.enrolled_at
+FROM (
+  SELECT
+    e.*,
+    (random() > 0.5) AS is_read_value
+  FROM enrollments e
+  ORDER BY e.enrolled_at DESC
+  LIMIT 25
+) s
+JOIN enrollments e ON e.id = s.id
+JOIN users u ON u.id = e.student_id
+JOIN courses c ON c.id = e.course_id;
+
+INSERT INTO notifications (user_id, type, title, body, metadata, is_read, read_at, created_at)
+SELECT
+  l.teacher_id,
+  'LECTURE_APPROVED',
+  'Lecture approved',
+  'Your lecture "' || l.title || '" has been approved and published.',
+  jsonb_build_object(
+    'lecture_id', l.id,
+    'lecture_title', l.title,
+    'course_id', c.id,
+    'course_title', c.title,
+    'approved_at', l.approved_at
+  ),
+  FALSE,
+  NULL,
+  COALESCE(l.approved_at, NOW())
+FROM lectures l
+JOIN courses c ON c.id = l.course_id
+WHERE l.status = 'APPROVED_PUBLIC';
+
+INSERT INTO notifications (user_id, type, title, body, metadata, is_read, read_at, created_at)
+SELECT
+  l.teacher_id,
+  'LECTURE_REJECTED',
+  'Lecture rejected',
+  'Your lecture "' || l.title || '" was rejected. Reason: ' || COALESCE(l.rejection_reason, 'No reason provided'),
+  jsonb_build_object(
+    'lecture_id', l.id,
+    'lecture_title', l.title,
+    'course_id', c.id,
+    'course_title', c.title,
+    'rejection_reason', l.rejection_reason
+  ),
+  FALSE,
+  NULL,
+  NOW() - INTERVAL '1 day'
+FROM lectures l
+JOIN courses c ON c.id = l.course_id
+WHERE l.status = 'REJECTED';
+
+-- Query test nhanh
+SELECT fs.title AS flashcard_set, COUNT(fc.id) AS total_cards
+FROM flashcard_sets fs
+LEFT JOIN flashcard_cards fc ON fc.flashcard_set_id = fs.id
+GROUP BY fs.id, fs.title
+ORDER BY fs.created_at DESC;
+
+SELECT t.title AS test_title, COUNT(q.id) AS total_questions
+FROM tests t
+LEFT JOIN test_questions q ON q.test_id = t.id
+GROUP BY t.id, t.title
+ORDER BY t.created_at DESC;
+
+SELECT
+  t.title,
+  u.email AS student_email,
+  ta.attempt_no,
+  ta.status,
+  ta.score,
+  ta.max_score,
+  ta.started_at,
+  ta.submitted_at,
+  ta.expires_at
+FROM test_attempts ta
+JOIN tests t ON t.id = ta.test_id
+JOIN users u ON u.id = ta.student_id
+ORDER BY ta.started_at DESC
+LIMIT 20;
+
+SELECT
+  n.type,
+  u.email,
+  n.title,
+  n.is_read,
+  n.created_at
+FROM notifications n
+JOIN users u ON u.id = n.user_id
+ORDER BY n.created_at DESC
+LIMIT 20;
+
+SELECT email, code, type, expires_at, used_at, created_at
+FROM otp_codes
+ORDER BY created_at DESC;
