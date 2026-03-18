@@ -11,7 +11,10 @@ function normalizeCourse(row) {
     price: row.price,
     status: row.status,
     total_duration_minutes: row.total_duration_minutes,
+    start_at: row.start_at ?? null,
+    end_at: row.end_at ?? null,
     created_at: row.created_at,
+    updated_at: row.updated_at ?? null,
     teacher_name: row.users?.full_name || null,
     teacher_email: row.users?.email || null,
   };
@@ -54,13 +57,16 @@ async function getAllCourses() {
       price,
       status,
       total_duration_minutes,
+      start_at,
+      end_at,
       created_at,
+      updated_at,
       users!courses_teacher_id_fkey (
         full_name,
         email
       )
     `)
-    .neq("status", "DELETED")
+    .neq("status", "ARCHIVED")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -81,7 +87,10 @@ async function getCoursesForStudent(studentId) {
         price,
         status,
         total_duration_minutes,
+        start_at,
+        end_at,
         created_at,
+        updated_at,
         users!courses_teacher_id_fkey (
           full_name,
           email
@@ -89,7 +98,7 @@ async function getCoursesForStudent(studentId) {
       )
     `)
     .eq("student_id", studentId)
-    .neq("courses.status", "DELETED")
+    .neq("courses.status", "ARCHIVED")
     .order("enrolled_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -115,14 +124,17 @@ async function getCoursesByTeacherId(teacherId) {
       price,
       status,
       total_duration_minutes,
+      start_at,
+      end_at,
       created_at,
+      updated_at,
       users!courses_teacher_id_fkey (
         full_name,
         email
       )
     `)
     .eq("teacher_id", teacherId)
-    .neq("status", "DELETED")
+    .neq("status", "ARCHIVED")
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -140,14 +152,17 @@ async function getCourseById(courseId) {
       price,
       status,
       total_duration_minutes,
+      start_at,
+      end_at,
       created_at,
+      updated_at,
       users!courses_teacher_id_fkey (
         full_name,
         email
       )
     `)
     .eq("id", courseId)
-    .neq("status", "DELETED")
+    .neq("status", "ARCHIVED")
     .single();
 
   if (error) {
@@ -166,6 +181,8 @@ async function createCourseByAdmin(payload, adminId) {
     price,
     status,
     total_duration_minutes,
+    start_at,
+    end_at,
   } = payload;
 
   if (!title || !title.trim()) {
@@ -178,13 +195,21 @@ async function createCourseByAdmin(payload, adminId) {
 
   await assertTeacher(teacher_id);
 
+  const allowed = ["DRAFT", "ON_SALE", "ARCHIVED"];
+  if (status !== undefined && status !== null && !allowed.includes(status)) {
+    throw new Error(`status chỉ được phép: ${allowed.join(", ")}`);
+  }
+
   const insertPayload = {
     teacher_id,
     title: title.trim(),
     description: description ?? null,
     price: Number(price ?? 0),
-    status: status ?? "PUBLISHED",
+    status: status ?? "DRAFT",
     total_duration_minutes: Number(total_duration_minutes ?? 0),
+    start_at: start_at ? new Date(start_at).toISOString() : null,
+    end_at: end_at ? new Date(end_at).toISOString() : null,
+    updated_at: new Date().toISOString(),
     created_by: adminId ?? null,
   };
 
@@ -228,13 +253,9 @@ async function assignTeacherToCourse(courseId, teacherId) {
     throw new Error("course_id không tồn tại");
   }
 
-  if (exists.status === "DELETED") {
-    throw new Error("Khóa học đã bị xóa");
-  }
-
   const { error } = await supabase
     .from("courses")
-    .update({ teacher_id: teacherId })
+    .update({ teacher_id: teacherId, updated_at: new Date().toISOString() })
     .eq("id", courseId);
 
   if (error) throw new Error(error.message);
@@ -253,10 +274,6 @@ async function updateCourseByAdmin(courseId, payload) {
     throw new Error("course_id không tồn tại");
   }
 
-  if (exists.status === "DELETED") {
-    throw new Error("Khóa học đã bị xóa");
-  }
-
   const {
     teacher_id,
     title,
@@ -264,6 +281,8 @@ async function updateCourseByAdmin(courseId, payload) {
     price,
     status,
     total_duration_minutes,
+    start_at,
+    end_at,
   } = payload;
 
   if (teacher_id) {
@@ -296,9 +315,9 @@ async function updateCourseByAdmin(courseId, payload) {
   }
 
   if (status !== undefined) {
-    const allowed = ["DRAFT", "PUBLISHED", "ARCHIVED"];
+    const allowed = ["DRAFT", "ON_SALE", "ARCHIVED"];
     if (!allowed.includes(status)) {
-      throw new Error(`status chỉ được phép: ${allowed.join(", ")} (xóa dùng DELETE)`);
+      throw new Error(`status chỉ được phép: ${allowed.join(", ")}`);
     }
     updatePayload.status = status;
   }
@@ -311,9 +330,19 @@ async function updateCourseByAdmin(courseId, payload) {
     updatePayload.total_duration_minutes = d;
   }
 
+  if (start_at !== undefined) {
+    updatePayload.start_at = start_at ? new Date(start_at).toISOString() : null;
+  }
+
+  if (end_at !== undefined) {
+    updatePayload.end_at = end_at ? new Date(end_at).toISOString() : null;
+  }
+
   if (Object.keys(updatePayload).length === 0) {
     throw new Error("Không có field nào để cập nhật");
   }
+
+  updatePayload.updated_at = new Date().toISOString();
 
   const { error } = await supabase
     .from("courses")
@@ -335,19 +364,16 @@ async function softDeleteCourseByAdmin(courseId) {
   if (existsError || !exists) {
     throw new Error("course_id không tồn tại");
   }
-
-  if (exists.status === "DELETED") {
-    return { message: "Course already deleted" };
-  }
+  if (exists.status === "ARCHIVED") return { message: "Course already archived" };
 
   const { error } = await supabase
     .from("courses")
-    .update({ status: "DELETED" })
+    .update({ status: "ARCHIVED", updated_at: new Date().toISOString() })
     .eq("id", courseId);
 
   if (error) throw new Error(error.message);
 
-  return { message: "Deleted course" };
+  return { message: "Archived course" };
 }
 
 module.exports = {

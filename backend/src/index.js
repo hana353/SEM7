@@ -7,7 +7,7 @@ const authRoutes = require("./routes/auth.routes");
 const courseRoutes = require("./routes/course.routes");
 const userRoutes = require("./routes/user.routes");
 const lectureRoutes = require("./routes/lecture.routes");
-const quizRoutes = require("./routes/quiz.routes");
+const flashcardRoutes = require("./routes/flashcard.routes");
 const testRoutes = require("./routes/test.routes");
 const vocabularyRoutes = require("./routes/vocabulary.routes");
 const enrollmentRoutes = require("./routes/enrollment.routes");
@@ -15,6 +15,7 @@ const statsRoutes = require("./routes/stats.routes");
 const paymentRoutes = require("./routes/payment.routes");
 const powerBIRoutes = require("./routes/powerbi.routes");
 const speechRoutes = require("./routes/speech.routes");
+const notificationRoutes = require("./routes/notification.routes");
 
 process.on("exit", (code) => {
   console.log("Process exit with code:", code);
@@ -46,7 +47,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/lectures", lectureRoutes);
-app.use("/api/quizzes", quizRoutes);
+app.use("/api/flashcards", flashcardRoutes);
 app.use("/api/tests", testRoutes);
 app.use("/api/vocabulary", vocabularyRoutes);
 app.use("/api/enrollments", enrollmentRoutes);
@@ -54,6 +55,7 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/powerbi", powerBIRoutes);
 app.use("/api/speech", speechRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

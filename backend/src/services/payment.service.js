@@ -1,5 +1,6 @@
 const supabase = require("../config/supabase");
 const { getCourseById } = require("./course.service");
+const { createNotification } = require("./notification.service");
 const {
   vnpayConfig,
   formatVnpDate,
@@ -65,6 +66,41 @@ async function createEnrollmentIfNotExists(studentId, courseId) {
     .single();
 
   if (insertError) throw new Error(insertError.message);
+
+  // Notify teacher: new student enrollment
+  try {
+    const [{ data: courseRow }, { data: studentRow }] = await Promise.all([
+      supabase
+        .from("courses")
+        .select("id, title, teacher_id")
+        .eq("id", courseId)
+        .single(),
+      supabase
+        .from("users")
+        .select("id, full_name, email")
+        .eq("id", studentId)
+        .single(),
+    ]);
+
+    if (courseRow?.teacher_id) {
+      await createNotification({
+        userId: courseRow.teacher_id,
+        type: "ENROLLMENT_NEW",
+        title: "Có học viên tham gia khóa học mới",
+        body: `${studentRow?.full_name || "Một học viên"} đã tham gia khóa "${courseRow?.title || ""}"`,
+        metadata: {
+          student_id: studentId,
+          student_email: studentRow?.email || null,
+          course_id: courseId,
+          course_title: courseRow?.title || null,
+          enrollment_id: inserted.id,
+        },
+      });
+    }
+  } catch (e) {
+    // ignore notification failures
+  }
+
   return inserted.id;
 }
 
@@ -78,8 +114,8 @@ async function createCoursePaymentUrl({ studentId, courseId, req }) {
   const course = await getCourseById(courseId);
   if (!course) throw new Error("course_id không tồn tại hoặc đã bị xóa");
 
-  if (course.status !== "PUBLISHED") {
-    throw new Error("Khóa học chưa được PUBLISHED nên không thể thanh toán");
+  if (course.status !== "ON_SALE") {
+    throw new Error("Khóa học chưa ở trạng thái ON_SALE nên không thể thanh toán");
   }
 
   if (await isEnrolled(studentId, courseId)) {

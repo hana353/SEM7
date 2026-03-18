@@ -4,7 +4,7 @@ import api from "../../api/axios";
 
 const tabs = [
   { id: "lectures", label: "Bài giảng" },
-  { id: "quizzes", label: "Quiz" },
+  { id: "flashcards", label: "Flashcard" },
   { id: "tests", label: "Bài test" },
 ];
 
@@ -13,6 +13,7 @@ function EditLectureModal({ lecture, onClose, onSuccess }) {
   const [title, setTitle] = useState(lecture?.title ?? "");
   const [videoUrl, setVideoUrl] = useState(lecture?.video_url ?? "");
   const [durationMinutes, setDurationMinutes] = useState(lecture?.duration_minutes ?? 10);
+  const [status, setStatus] = useState(lecture?.status ?? "DRAFT");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -29,6 +30,7 @@ function EditLectureModal({ lecture, onClose, onSuccess }) {
         title: title.trim(),
         video_url: videoUrl.trim() || null,
         duration_minutes: Number(durationMinutes) || 0,
+        status,
       });
       onSuccess?.();
       onClose?.();
@@ -58,6 +60,22 @@ function EditLectureModal({ lecture, onClose, onSuccess }) {
             <label className="block text-xs font-medium text-slate-700 mb-1">Thời lượng (phút)</label>
             <input type="number" min={1} value={durationMinutes} onChange={(e) => setDurationMinutes(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
           </div>
+          {lecture?.status !== "APPROVED_PUBLIC" && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+              >
+                <option value="DRAFT">Nháp</option>
+                <option value="PENDING_APPROVAL">Gửi admin duyệt (Public)</option>
+              </select>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Nếu chọn Public, bài giảng sẽ vào trạng thái chờ admin duyệt trước khi học viên thấy.
+              </p>
+            </div>
+          )}
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Hủy</button>
@@ -74,6 +92,7 @@ function AddLectureModal({ courseId, onClose, onSuccess }) {
   const [title, setTitle] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(10);
+  const [status, setStatus] = useState("DRAFT");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -90,6 +109,7 @@ function AddLectureModal({ courseId, onClose, onSuccess }) {
         title: title.trim(),
         video_url: videoUrl.trim() || null,
         duration_minutes: Number(durationMinutes) || 0,
+        status,
       });
       onSuccess?.(res.data?.data);
       onClose?.();
@@ -151,6 +171,20 @@ function AddLectureModal({ courseId, onClose, onSuccess }) {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+            >
+              <option value="DRAFT">Nháp</option>
+              <option value="PENDING_APPROVAL">Gửi admin duyệt (Public)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Public cần admin duyệt. Học viên chỉ thấy khi được duyệt.
+            </p>
+          </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
             <button
@@ -174,66 +208,57 @@ function AddLectureModal({ courseId, onClose, onSuccess }) {
   );
 }
 
-/* ========== MODAL TẠO QUIZ + CÂU HỎI MULTIPLE CHOICE ========== */
-function AddQuizModal({ courseId, onClose, onSuccess }) {
+/* ========== MODAL TẠO FLASHCARD SET + CARDS ========== */
+function AddFlashcardModal({ courseId, onClose, onSuccess }) {
   const [title, setTitle] = useState("");
-  const [questions, setQuestions] = useState([{ question: "", correct: "", wrong1: "", wrong2: "", wrong3: "" }]);
+  const [cards, setCards] = useState([{ front: "", back: "" }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("DRAFT");
 
-  const addQuestion = () => {
-    setQuestions((q) => [...q, { question: "", correct: "", wrong1: "", wrong2: "", wrong3: "" }]);
+  const addCard = () => setCards((c) => [...c, { front: "", back: "" }]);
+  const removeCard = (idx) => {
+    if (cards.length <= 1) return;
+    setCards((c) => c.filter((_, i) => i !== idx));
   };
-
-  const updateQuestion = (idx, field, value) => {
-    setQuestions((q) => {
-      const n = [...q];
+  const updateCard = (idx, field, value) => {
+    setCards((c) => {
+      const n = [...c];
       n[idx] = { ...n[idx], [field]: value };
       return n;
     });
   };
 
-  const removeQuestion = (idx) => {
-    if (questions.length <= 1) return;
-    setQuestions((q) => q.filter((_, i) => i !== idx));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!title.trim()) {
-      setError("Tiêu đề quiz không được để trống");
-      return;
-    }
-    const valid = questions.filter((q) => q.question.trim() && q.correct.trim());
-    if (valid.length === 0) {
-      setError("Cần ít nhất 1 câu hỏi với đáp án đúng");
-      return;
-    }
+    if (!title.trim()) return setError("Tiêu đề flashcard không được để trống");
+    const valid = cards.filter((x) => x.front.trim() && x.back.trim());
+    if (valid.length === 0) return setError("Cần ít nhất 1 thẻ có đủ mặt trước và mặt sau");
+
     setSaving(true);
     try {
-      const quizRes = await api.post("/quizzes", {
+      const setRes = await api.post("/flashcards", {
         course_id: courseId,
         title: title.trim(),
         status,
       });
-      const quizId = quizRes.data?.data?.id;
-      if (!quizId) throw new Error("Tạo quiz thất bại");
+      const setId = setRes.data?.data?.id;
+      if (!setId) throw new Error("Tạo flashcard set thất bại");
+
       for (let i = 0; i < valid.length; i++) {
-        const q = valid[i];
-        const wrongs = [q.wrong1, q.wrong2, q.wrong3].filter(Boolean).join("||");
-        await api.post(`/quizzes/teacher/${quizId}/cards`, {
-          front_text: q.question.trim(),
-          back_text: q.correct.trim(),
-          back_image_url: wrongs || null,
+        const c = valid[i];
+        await api.post(`/flashcards/teacher/${setId}/cards`, {
+          front_text: c.front.trim(),
+          back_text: c.back.trim(),
           position: i,
         });
       }
+
       onSuccess?.();
       onClose?.();
     } catch (err) {
-      setError(err.response?.data?.message || "Lỗi khi tạo quiz");
+      setError(err.response?.data?.message || "Lỗi khi tạo flashcard");
     } finally {
       setSaving(false);
     }
@@ -243,99 +268,78 @@ function AddQuizModal({ courseId, onClose, onSuccess }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl my-8">
         <div className="border-b border-slate-200 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-900">Tạo Quiz (Multiple Choice)</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Thêm các câu hỏi trắc nghiệm với 4 đáp án (1 đúng)</p>
+          <h3 className="text-sm font-semibold text-slate-900">Tạo Flashcard</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Mỗi thẻ gồm mặt trước và mặt sau</p>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Tiêu đề quiz</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Ví dụ: Quiz từ vựng Bài 1"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-700 mb-1">Tiêu đề</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Ví dụ: Flashcard từ vựng Bài 1"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
+              >
+                <option value="DRAFT">Nháp (học sinh chưa thấy)</option>
+                <option value="PUBLISHED">Mở cho học sinh</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white"
-            >
-              <option value="DRAFT">Nháp (học sinh chưa thấy)</option>
-              <option value="PUBLISHED">Mở cho học sinh</option>
-            </select>
-          </div>
+
           <div>
             <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-medium text-slate-700">Các câu hỏi</label>
-              <button type="button" onClick={addQuestion} className="text-xs text-blue-600 hover:underline">
-                + Thêm câu hỏi
+              <label className="text-xs font-medium text-slate-700">Danh sách thẻ</label>
+              <button type="button" onClick={addCard} className="text-xs text-blue-600 hover:underline">
+                + Thêm thẻ
               </button>
             </div>
-            {questions.map((q, idx) => (
-              <div key={idx} className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
+            {cards.map((c, idx) => (
+              <div key={idx} className="mb-3 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-medium text-slate-600">Câu {idx + 1}</span>
-                  {questions.length > 1 && (
-                    <button type="button" onClick={() => removeQuestion(idx)} className="text-xs text-red-600 hover:underline">
+                  <span className="text-xs font-medium text-slate-600">Thẻ {idx + 1}</span>
+                  {cards.length > 1 && (
+                    <button type="button" onClick={() => removeCard(idx)} className="text-xs text-red-600 hover:underline">
                       Xóa
                     </button>
                   )}
                 </div>
-                <input
-                  type="text"
-                  value={q.question}
-                  onChange={(e) => updateQuestion(idx, "question", e.target.value)}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm mb-2"
-                  placeholder="Nội dung câu hỏi"
-                />
-                <div className="space-y-1.5 text-sm">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <input
                     type="text"
-                    value={q.correct}
-                    onChange={(e) => updateQuestion(idx, "correct", e.target.value)}
-                    className="w-full rounded border border-emerald-300 px-2 py-1.5 bg-emerald-50/50"
-                    placeholder="Đáp án đúng"
+                    value={c.front}
+                    onChange={(e) => updateCard(idx, "front", e.target.value)}
+                    className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                    placeholder="Mặt trước"
                   />
                   <input
                     type="text"
-                    value={q.wrong1}
-                    onChange={(e) => updateQuestion(idx, "wrong1", e.target.value)}
-                    className="w-full rounded border border-slate-300 px-2 py-1.5"
-                    placeholder="Đáp án sai 1"
-                  />
-                  <input
-                    type="text"
-                    value={q.wrong2}
-                    onChange={(e) => updateQuestion(idx, "wrong2", e.target.value)}
-                    className="w-full rounded border border-slate-300 px-2 py-1.5"
-                    placeholder="Đáp án sai 2"
-                  />
-                  <input
-                    type="text"
-                    value={q.wrong3}
-                    onChange={(e) => updateQuestion(idx, "wrong3", e.target.value)}
-                    className="w-full rounded border border-slate-300 px-2 py-1.5"
-                    placeholder="Đáp án sai 3"
+                    value={c.back}
+                    onChange={(e) => updateCard(idx, "back", e.target.value)}
+                    className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                    placeholder="Mặt sau"
                   />
                 </div>
               </div>
             ))}
           </div>
+
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
               Hủy
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-            >
-              {saving ? "Đang tạo…" : "Tạo quiz"}
+            <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+              {saving ? "Đang tạo…" : "Tạo flashcard"}
             </button>
           </div>
         </form>
@@ -544,31 +548,31 @@ function AddTestModal({ courseId, onClose, onSuccess }) {
   );
 }
 
-/* ========== MODAL XEM CHI TIẾT QUIZ (DANH SÁCH CÂU HỎI) ========== */
-function QuizDetailModal({ quizId, onClose }) {
+/* ========== MODAL XEM CHI TIẾT FLASHCARD ========== */
+function FlashcardDetailModal({ setId, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    api.get(`/quizzes/teacher/${quizId}`).then((r) => setData(r.data?.data)).catch(() => setData(null)).finally(() => setLoading(false));
-  }, [quizId]);
+    api.get(`/flashcards/teacher/${setId}`).then((r) => setData(r.data?.data)).catch(() => setData(null)).finally(() => setLoading(false));
+  }, [setId]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl my-8 max-h-[85vh] overflow-hidden flex flex-col">
         <div className="border-b border-slate-200 px-4 py-3 flex justify-between items-center">
-          <h3 className="text-sm font-semibold text-slate-900">Danh sách câu hỏi Quiz</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Danh sách thẻ Flashcard</h3>
           <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700">Đóng</button>
         </div>
         <div className="p-4 overflow-y-auto flex-1">
           {loading ? <p className="text-slate-500">Đang tải...</p> : !data ? <p className="text-slate-500">Không tải được dữ liệu</p> : (
             <>
-              <p className="text-xs text-slate-600 mb-3">Quiz: {data.title}</p>
-              {(data.cards || []).length === 0 ? <p className="text-slate-500">Chưa có câu hỏi</p> : (
+              <p className="text-xs text-slate-600 mb-3">Flashcard: {data.title}</p>
+              {(data.cards || []).length === 0 ? <p className="text-slate-500">Chưa có thẻ</p> : (
                 <ul className="space-y-3">
                   {(data.cards || []).map((card, i) => (
                     <li key={card.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50">
-                      <p className="text-xs font-medium text-slate-600">Câu {i + 1}</p>
-                      <p className="text-sm text-slate-900 mt-1">{card.front_text}</p>
-                      <p className="text-xs text-emerald-700 mt-1">Đáp án đúng: {card.back_text}</p>
+                      <p className="text-xs font-medium text-slate-600">Thẻ {i + 1}</p>
+                      <p className="text-sm text-slate-900 mt-1">Mặt trước: {card.front_text}</p>
+                      <p className="text-sm text-slate-700 mt-1">Mặt sau: {card.back_text}</p>
                     </li>
                   ))}
                 </ul>
@@ -666,15 +670,15 @@ export default function TeacherCourseDetail() {
   const [course, setCourse] = useState(null);
   const [activeTab, setActiveTab] = useState("lectures");
   const [lectures, setLectures] = useState([]);
-  const [quizzes, setQuizzes] = useState([]);
+  const [flashcards, setFlashcards] = useState([]);
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showLectureModal, setShowLectureModal] = useState(false);
   const [editingLecture, setEditingLecture] = useState(null);
-  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [showFlashcardModal, setShowFlashcardModal] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
-  const [quizDetailModal, setQuizDetailModal] = useState(null);
+  const [flashcardDetailModal, setFlashcardDetailModal] = useState(null);
   const [testDetailModal, setTestDetailModal] = useState(null);
   const [testAttemptsModal, setTestAttemptsModal] = useState(null);
 
@@ -682,8 +686,8 @@ export default function TeacherCourseDetail() {
     if (!courseId) return;
     if (activeTab === "lectures") {
       api.get(`/lectures/course/${courseId}`).then((r) => setLectures(Array.isArray(r.data) ? r.data : [])).catch(() => setLectures([]));
-    } else if (activeTab === "quizzes") {
-      api.get(`/quizzes/teacher/list?course_id=${courseId}`).then((r) => setQuizzes(r.data?.data || [])).catch(() => setQuizzes([]));
+    } else if (activeTab === "flashcards") {
+      api.get(`/flashcards/teacher/list?course_id=${courseId}`).then((r) => setFlashcards(r.data?.data || [])).catch(() => setFlashcards([]));
     } else if (activeTab === "tests") {
       api.get(`/tests/teacher/list?course_id=${courseId}`).then((r) => setTests(r.data?.data || [])).catch(() => setTests([]));
     }
@@ -704,7 +708,7 @@ export default function TeacherCourseDetail() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b px-6 py-4">
-        <button type="button" onClick={() => navigate("/teacher")} className="text-sm text-slate-500 hover:text-slate-700 mb-2">
+        <button type="button" onClick={() => navigate("/teacher?section=myCourses")} className="text-sm text-slate-500 hover:text-slate-700 mb-2">
           ← Quay lại
         </button>
         <h1 className="text-xl font-semibold text-slate-900">{course.title}</h1>
@@ -746,9 +750,29 @@ export default function TeacherCourseDetail() {
                     <div>
                       <span className="font-medium">{i + 1}. {l.title}</span>
                       {l.video_url && <span className="ml-2 text-xs text-slate-500">(có video)</span>}
+                      {l.status && (
+                        <span className="ml-2 text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                          {l.status}
+                        </span>
+                      )}
+                      {l.status === "REJECTED" && l.rejection_reason && (
+                        <p className="text-xs text-red-600 mt-1">Lý do từ chối: {l.rejection_reason}</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-slate-500">{l.duration_minutes || 0} phút</span>
+                      {(l.status === "DRAFT" || l.status === "REJECTED") && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await api.patch(`/lectures/${l.id}`, { status: "PENDING_APPROVAL" });
+                            refresh();
+                          }}
+                          className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500"
+                        >
+                          Gửi duyệt
+                        </button>
+                      )}
                       <button type="button" onClick={() => setEditingLecture(l)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">Chỉnh sửa</button>
                     </div>
                   </li>
@@ -758,28 +782,28 @@ export default function TeacherCourseDetail() {
           </div>
         )}
 
-        {activeTab === "quizzes" && (
+        {activeTab === "flashcards" && (
           <div className="bg-white rounded-xl border p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Quiz</h2>
+              <h2 className="text-lg font-semibold">Flashcard</h2>
               <button
                 type="button"
-                onClick={() => setShowQuizModal(true)}
+                onClick={() => setShowFlashcardModal(true)}
                 className="px-3 py-1.5 bg-slate-900 text-white text-sm rounded-lg hover:bg-slate-800"
               >
-                + Tạo quiz
+                + Tạo flashcard
               </button>
             </div>
-            {quizzes.length === 0 ? (
-              <p className="text-slate-500">Chưa có quiz. Nhấn &quot;Tạo quiz&quot; để thêm câu hỏi trắc nghiệm.</p>
+            {flashcards.length === 0 ? (
+              <p className="text-slate-500">Chưa có flashcard. Nhấn &quot;Tạo flashcard&quot; để thêm thẻ học.</p>
             ) : (
               <ul className="space-y-2">
-                {quizzes.map((q) => (
-                  <li key={q.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                    <span>{q.title}</span>
+                {flashcards.map((s) => (
+                  <li key={s.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                    <span>{s.title}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{q.status || "DRAFT"}</span>
-                      <button type="button" onClick={() => setQuizDetailModal(q.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem danh sách câu hỏi</button>
+                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{s.status || "DRAFT"}</span>
+                      <button type="button" onClick={() => setFlashcardDetailModal(s.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem thẻ</button>
                     </div>
                   </li>
                 ))}
@@ -826,9 +850,9 @@ export default function TeacherCourseDetail() {
       {editingLecture && (
         <EditLectureModal lecture={editingLecture} onClose={() => setEditingLecture(null)} onSuccess={() => { setEditingLecture(null); refresh(); }} />
       )}
-      {showQuizModal && <AddQuizModal courseId={courseId} onClose={() => setShowQuizModal(false)} onSuccess={refresh} />}
+      {showFlashcardModal && <AddFlashcardModal courseId={courseId} onClose={() => setShowFlashcardModal(false)} onSuccess={refresh} />}
       {showTestModal && <AddTestModal courseId={courseId} onClose={() => setShowTestModal(false)} onSuccess={refresh} />}
-      {quizDetailModal && <QuizDetailModal quizId={quizDetailModal} onClose={() => setQuizDetailModal(null)} />}
+      {flashcardDetailModal && <FlashcardDetailModal setId={flashcardDetailModal} onClose={() => setFlashcardDetailModal(null)} />}
       {testDetailModal && <TestDetailModal testId={testDetailModal} onClose={() => setTestDetailModal(null)} />}
       {testAttemptsModal && <TestAttemptsModal testId={testAttemptsModal} onClose={() => setTestAttemptsModal(null)} />}
     </div>

@@ -1,26 +1,34 @@
 const supabase = require("../config/supabase");
+const { createNotification } = require("./notification.service");
 
 async function assertCourseAssignedToTeacher(teacherId, courseId) {
   const { data, error } = await supabase
     .from("courses")
-    .select("id, status")
+    .select("id, status, teacher_id")
     .eq("id", courseId)
     .eq("teacher_id", teacherId)
     .single();
 
-  if (error || !data || data.status === "DELETED") {
+  if (error || !data || data.status === "ARCHIVED") {
     throw new Error("Khóa học không tồn tại hoặc không được gán cho giáo viên này");
   }
 }
 
-async function getLecturesByCourseId(courseId) {
-  const { data, error } = await supabase
+async function getLecturesByCourseId(courseId, { onlyApprovedPublic = false } = {}) {
+  let query = supabase
     .from("lectures")
-    .select("id, course_id, title, video_url, duration_minutes, order_index, created_at")
+    .select(
+      "id, course_id, teacher_id, title, video_url, duration_minutes, order_index, status, submitted_at, approved_by, approved_at, rejection_reason, created_at, updated_at"
+    )
     .eq("course_id", courseId)
     .order("order_index", { ascending: true })
     .order("created_at", { ascending: true });
 
+  if (onlyApprovedPublic) {
+    query = query.eq("status", "APPROVED_PUBLIC");
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -31,10 +39,16 @@ async function teacherGetAllLectures(teacherId) {
     .select(`
       id,
       course_id,
+      teacher_id,
       title,
       video_url,
       duration_minutes,
       order_index,
+      status,
+      submitted_at,
+      approved_by,
+      approved_at,
+      rejection_reason,
       courses!inner (
         title,
         teacher_id,
@@ -42,7 +56,7 @@ async function teacherGetAllLectures(teacherId) {
       )
     `)
     .eq("courses.teacher_id", teacherId)
-    .neq("courses.status", "DELETED")
+    .neq("courses.status", "ARCHIVED")
     .order("order_index", { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -78,7 +92,7 @@ async function assertStudentEnrolled(studentId, courseId) {
 
 async function studentGetLectures(studentId, courseId) {
   await assertStudentEnrolled(studentId, courseId);
-  return getLecturesByCourseId(courseId);
+  return getLecturesByCourseId(courseId, { onlyApprovedPublic: true });
 }
 
 async function teacherCreateLecture(teacherId, courseId, payload) {
@@ -90,15 +104,25 @@ async function teacherCreateLecture(teacherId, courseId, payload) {
   const video_url = payload.video_url ? String(payload.video_url).trim() : null;
   const duration_minutes = Number(payload.duration_minutes) || 0;
   const order_index = Number.isNaN(Number(payload.order_index)) ? 0 : Number(payload.order_index);
+  const status = payload.status ? String(payload.status).trim() : "DRAFT";
+
+  const allowed = ["DRAFT", "PENDING_APPROVAL"];
+  if (!allowed.includes(status)) {
+    throw new Error(`status chỉ được phép: ${allowed.join(", ")}`);
+  }
 
   const { data, error } = await supabase
     .from("lectures")
     .insert({
       course_id: courseId,
+      teacher_id: teacherId,
       title,
       video_url,
       duration_minutes,
       order_index,
+      status,
+      submitted_at: status === "PENDING_APPROVAL" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
     })
     .select("*")
     .single();
@@ -113,6 +137,7 @@ async function teacherUpdateLecture(teacherId, lectureId, payload) {
     .select(`
       id,
       course_id,
+      status,
       courses!inner (
         teacher_id
       )
@@ -147,6 +172,24 @@ async function teacherUpdateLecture(teacherId, lectureId, payload) {
     updates.order_index = oi;
   }
 
+  if (payload.status !== undefined) {
+    const nextStatus = String(payload.status || "").trim();
+    const allowed = ["DRAFT", "PENDING_APPROVAL"];
+    if (!allowed.includes(nextStatus)) {
+      throw new Error(`status chỉ được phép: ${allowed.join(", ")}`);
+    }
+
+    if (owned.status === "APPROVED_PUBLIC" && nextStatus === "PENDING_APPROVAL") {
+      throw new Error("Bài giảng đã public, không thể chuyển về chờ duyệt");
+    }
+
+    updates.status = nextStatus;
+    updates.submitted_at = nextStatus === "PENDING_APPROVAL" ? new Date().toISOString() : null;
+    if (nextStatus !== "PENDING_APPROVAL") {
+      updates.rejection_reason = null;
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
     const { data, error } = await supabase
       .from("lectures")
@@ -157,6 +200,8 @@ async function teacherUpdateLecture(teacherId, lectureId, payload) {
     if (error) throw new Error(error.message);
     return data;
   }
+
+  updates.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from("lectures")
@@ -203,4 +248,130 @@ module.exports = {
   teacherUpdateLecture,
   teacherDeleteLecture,
   studentGetLectures,
+  adminGetPendingLectures,
+  adminApproveLecture,
+  adminRejectLecture,
 };
+
+async function adminGetPendingLectures() {
+  const { data, error } = await supabase
+    .from("lectures")
+    .select(
+      `
+      id,
+      course_id,
+      teacher_id,
+      title,
+      video_url,
+      duration_minutes,
+      order_index,
+      status,
+      submitted_at,
+      created_at,
+      updated_at,
+      courses (
+        title
+      ),
+      users!lectures_teacher_id_fkey (
+        full_name,
+        email
+      )
+    `
+    )
+    .eq("status", "PENDING_APPROVAL")
+    .order("submitted_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return { data: data || [] };
+}
+
+async function adminApproveLecture(adminId, lectureId) {
+  const { data: lecture, error: fetchError } = await supabase
+    .from("lectures")
+    .select("id, teacher_id, status, title, course_id")
+    .eq("id", lectureId)
+    .single();
+
+  if (fetchError || !lecture) throw new Error("Lecture not found");
+  if (lecture.status !== "PENDING_APPROVAL") {
+    throw new Error("Lecture không ở trạng thái PENDING_APPROVAL");
+  }
+
+  const { data: updated, error } = await supabase
+    .from("lectures")
+    .update({
+      status: "APPROVED_PUBLIC",
+      approved_by: adminId,
+      approved_at: new Date().toISOString(),
+      rejection_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", lectureId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  if (lecture.teacher_id) {
+    try {
+      await createNotification({
+        userId: lecture.teacher_id,
+        type: "LECTURE_APPROVED",
+        title: "Bài giảng đã được duyệt",
+        body: `Bài giảng "${lecture.title}" đã được admin duyệt và đăng public.`,
+        metadata: { lecture_id: lecture.id, course_id: lecture.course_id },
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  return updated;
+}
+
+async function adminRejectLecture(adminId, lectureId, { reason } = {}) {
+  const rejectReason = String(reason || "").trim();
+  if (!rejectReason) throw new Error("reason là bắt buộc");
+
+  const { data: lecture, error: fetchError } = await supabase
+    .from("lectures")
+    .select("id, teacher_id, status, title, course_id")
+    .eq("id", lectureId)
+    .single();
+
+  if (fetchError || !lecture) throw new Error("Lecture not found");
+  if (lecture.status !== "PENDING_APPROVAL") {
+    throw new Error("Lecture không ở trạng thái PENDING_APPROVAL");
+  }
+
+  const { data: updated, error } = await supabase
+    .from("lectures")
+    .update({
+      status: "REJECTED",
+      approved_by: adminId,
+      approved_at: new Date().toISOString(),
+      rejection_reason: rejectReason,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", lectureId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  if (lecture.teacher_id) {
+    try {
+      await createNotification({
+        userId: lecture.teacher_id,
+        type: "LECTURE_REJECTED",
+        title: "Bài giảng bị từ chối",
+        body: `Bài giảng "${lecture.title}" bị từ chối. Lý do: ${rejectReason}`,
+        metadata: { lecture_id: lecture.id, course_id: lecture.course_id, reason: rejectReason },
+      });
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  return updated;
+}

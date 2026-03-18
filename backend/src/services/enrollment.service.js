@@ -21,7 +21,7 @@ async function getStudentsByTeacherId(teacherId) {
       )
     `)
     .eq("courses.teacher_id", teacherId)
-    .neq("courses.status", "DELETED")
+    .neq("courses.status", "ARCHIVED")
     .order("enrolled_at", { ascending: false });
 
   if (error) {

@@ -93,6 +93,7 @@ async function assertAttemptOwnedByStudent(studentId, attemptId) {
         title,
         description,
         duration_minutes,
+        max_attempts,
         status,
         is_deleted
       )
@@ -111,8 +112,25 @@ async function assertAttemptOwnedByStudent(studentId, attemptId) {
     title: data.tests?.title,
     description: data.tests?.description,
     duration_minutes: data.tests?.duration_minutes,
+    max_attempts: data.tests?.max_attempts,
     test_status: data.tests?.status,
   };
+}
+
+async function autoSubmitIfExpired(studentId, attempt) {
+  if (!attempt) return attempt;
+  if (attempt.status !== "IN_PROGRESS") return attempt;
+  if (!attempt.expires_at) return attempt;
+
+  const expiresAt = new Date(attempt.expires_at).getTime();
+  if (Number.isNaN(expiresAt)) return attempt;
+
+  if (Date.now() <= expiresAt) return attempt;
+
+  // auto submit
+  await module.exports.studentSubmitAttempt(studentId, attempt.id, { autoSubmitted: true });
+  const refreshed = await assertAttemptOwnedByStudent(studentId, attempt.id);
+  return refreshed;
 }
 
 async function getQuestionsWithChoices(testId, includeCorrect = false) {
@@ -224,7 +242,7 @@ module.exports = {
       .select("id")
       .eq("id", payload.course_id)
       .eq("teacher_id", teacherId)
-      .neq("status", "DELETED")
+      .neq("status", "ARCHIVED")
       .single();
 
     if (cError || !course) {
@@ -389,7 +407,7 @@ module.exports = {
         .select("id")
         .eq("id", payload.course_id)
         .eq("teacher_id", teacherId)
-        .neq("status", "DELETED")
+        .neq("status", "ARCHIVED")
         .single();
 
       if (cError || !course) {
@@ -638,12 +656,35 @@ module.exports = {
       }
     }
 
+    const { count: totalAttempts, error: countError } = await supabase
+      .from("test_attempts")
+      .select("id", { count: "exact", head: true })
+      .eq("test_id", testId)
+      .eq("student_id", studentId);
+
+    if (countError) throw new Error(countError.message);
+    const attemptNo = (totalAttempts || 0) + 1;
+
+    const timeLimitSeconds =
+      test.duration_minutes !== null && test.duration_minutes !== undefined
+        ? Math.max(Number(test.duration_minutes) || 0, 0) * 60
+        : null;
+
+    const startedAt = new Date();
+    const expiresAt =
+      timeLimitSeconds && timeLimitSeconds > 0
+        ? new Date(startedAt.getTime() + timeLimitSeconds * 1000).toISOString()
+        : null;
+
     const { data, error } = await supabase
       .from("test_attempts")
       .insert({
         test_id: testId,
         student_id: studentId,
-        started_at: new Date().toISOString(),
+        attempt_no: attemptNo,
+        started_at: startedAt.toISOString(),
+        time_limit_seconds: timeLimitSeconds,
+        expires_at: expiresAt,
         status: "IN_PROGRESS",
         score: null,
         max_score: null,
@@ -656,7 +697,8 @@ module.exports = {
   },
 
   async studentGetAttemptDetail(studentId, attemptId) {
-    const attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
+    let attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
+    attempt = await autoSubmitIfExpired(studentId, attempt);
 
     if (attempt.status !== "IN_PROGRESS") {
       throw new Error("Attempt này không còn ở trạng thái làm bài");
@@ -697,6 +739,9 @@ module.exports = {
         started_at: attempt.started_at,
         submitted_at: attempt.submitted_at,
         status: attempt.status,
+        attempt_no: attempt.attempt_no ?? null,
+        time_limit_seconds: attempt.time_limit_seconds ?? null,
+        expires_at: attempt.expires_at ?? null,
       },
       test,
       questions: resultQuestions,
@@ -704,7 +749,8 @@ module.exports = {
   },
 
   async studentSaveAnswer(studentId, attemptId, payload) {
-    const attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
+    let attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
+    attempt = await autoSubmitIfExpired(studentId, attempt);
 
     if (attempt.status !== "IN_PROGRESS") {
       throw new Error("Attempt đã nộp hoặc không còn hợp lệ");
@@ -777,7 +823,7 @@ module.exports = {
     return data;
   },
 
-  async studentSubmitAttempt(studentId, attemptId) {
+  async studentSubmitAttempt(studentId, attemptId, { autoSubmitted = false } = {}) {
     const attempt = await assertAttemptOwnedByStudent(studentId, attemptId);
 
     if (attempt.status !== "IN_PROGRESS") {
@@ -862,6 +908,7 @@ module.exports = {
         status: "GRADED",
         score,
         max_score: maxScore,
+        auto_submitted: !!autoSubmitted,
       })
       .eq("id", attemptId);
 

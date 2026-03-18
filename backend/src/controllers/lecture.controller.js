@@ -58,3 +58,37 @@ exports.teacherDeleteLecture = async (req, res) => {
     return res.status(400).json({ message: e.message });
   }
 };
+
+// Admin: list pending lectures
+exports.adminListPending = async (req, res) => {
+  try {
+    const data = await lectureService.adminGetPendingLectures();
+    return res.json(data);
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
+// Admin: approve lecture
+exports.adminApprove = async (req, res) => {
+  try {
+    const { lectureId } = req.params;
+    const data = await lectureService.adminApproveLecture(req.user.id, lectureId);
+    return res.json({ message: "approved", data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
+// Admin: reject lecture
+exports.adminReject = async (req, res) => {
+  try {
+    const { lectureId } = req.params;
+    const data = await lectureService.adminRejectLecture(req.user.id, lectureId, {
+      reason: req.body?.reason,
+    });
+    return res.json({ message: "rejected", data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};

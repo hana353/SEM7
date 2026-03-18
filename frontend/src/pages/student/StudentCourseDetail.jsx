@@ -4,7 +4,7 @@ import api from "../../api/axios";
 
 const tabs = [
   { id: "lectures", label: "Bài giảng" },
-  { id: "quizzes", label: "Quiz" },
+  { id: "flashcards", label: "Flashcard" },
   { id: "tests", label: "Bài test" },
 ];
 
@@ -15,7 +15,7 @@ export default function StudentCourseDetail() {
   const [course, setCourse] = useState(null);
   const [activeTab, setActiveTab] = useState("lectures");
   const [lectures, setLectures] = useState([]);
-  const [quizzes, setQuizzes] = useState([]);
+  const [flashcards, setFlashcards] = useState([]);
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,11 +39,11 @@ export default function StudentCourseDetail() {
           console.error(err);
           setLectures([]);
         });
-    } else if (activeTab === "quizzes") {
+    } else if (activeTab === "flashcards") {
       api
-        .get(`/quizzes?course_id=${courseId}`)
-        .then(res => setQuizzes(res.data?.data || []))
-        .catch(() => setQuizzes([]));
+        .get(`/flashcards?course_id=${courseId}`)
+        .then(res => setFlashcards(res.data?.data || []))
+        .catch(() => setFlashcards([]));
     } else if (activeTab === "tests") {
       api
         .get(`/tests?course_id=${courseId}`)
@@ -146,7 +146,7 @@ export default function StudentCourseDetail() {
 
   const canPurchase =
     !isEnrolled &&
-    course.status === "PUBLISHED" &&
+    course.status === "ON_SALE" &&
     !checkingEnrollment;
 
   return (
@@ -281,36 +281,36 @@ export default function StudentCourseDetail() {
             </section>
           )}
 
-          {activeTab === "quizzes" && (
+          {activeTab === "flashcards" && (
             <section className="bg-white rounded-xl border p-6">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">
-                Quiz của khóa học
+                Flashcard của khóa học
               </h2>
-              {quizzes.length === 0 ? (
+              {flashcards.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  Chưa có quiz nào được mở cho khóa học này.
+                  Chưa có flashcard nào được mở cho khóa học này.
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {quizzes.map(q => (
+                  {flashcards.map(s => (
                     <li
-                      key={q.id}
+                      key={s.id}
                       className="flex items-center justify-between py-2 border-b last:border-0"
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-900">
-                          {q.title}
+                          {s.title}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Trạng thái: {q.status || "PUBLISHED"}
+                          Trạng thái: {s.status || "PUBLISHED"}
                         </p>
                       </div>
                       <button
                         type="button"
                         className="text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
-                        onClick={() => navigate(`/student/quiz/${q.id}`)}
+                        onClick={() => navigate(`/student/flashcards/${s.id}`)}
                       >
-                        Làm quiz
+                        Học flashcard
                       </button>
                     </li>
                   ))}

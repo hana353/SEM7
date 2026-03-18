@@ -7,10 +7,12 @@ import CoursesSection from "./CoursesSection";
 import StudentsSection from "./StudentsSection";
 import RevenueSection from "./RevenueSection";
 import ProfileSection from "./ProfileSection";
+import NotificationsSection from "./NotificationsSection";
 
 const sidebarItems = [
   { id: "dashboard", label: "Tổng quan" },
   { id: "myCourses", label: "Khóa học của tôi" },
+  { id: "notifications", label: "Thông báo" },
   { id: "students", label: "Học viên của tôi" },
   { id: "revenue", label: "Doanh thu & rút tiền" },
   { id: "profile", label: "Hồ sơ giảng dạy" },
@@ -41,6 +43,14 @@ export default function TeacherHomePage() {
       .finally(() => setLoadingStats(false));
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const section = params.get("section");
+    if (section && sidebarItems.some((x) => x.id === section)) {
+      setActiveSection(section);
+    }
+  }, []);
+
   const handleCourseClick = (courseId) => {
     navigate(`/teacher/course/${courseId}`);
   };
@@ -60,6 +70,10 @@ export default function TeacherHomePage() {
 
     if (activeSection === "myCourses") {
       return <CoursesSection courses={assignedCourses} loading={loadingCourses} onCourseClick={handleCourseClick} />;
+    }
+
+    if (activeSection === "notifications") {
+      return <NotificationsSection />;
     }
 
     if (activeSection === "students") {

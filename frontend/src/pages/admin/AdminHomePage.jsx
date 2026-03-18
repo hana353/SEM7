@@ -8,11 +8,13 @@ import CoursesTable from "./CoursesTable";
 import CreateCourseForm from "./CreateCourseForm";
 import VocabularySection from "./VocabularySection";
 import RevenuePage from "./RevenuePage";
+import LectureApprovalSection from "./LectureApprovalSection";
 
 const sidebarItems = [
   { id: "dashboard", label: "Tổng quan" },
   { id: "users", label: "Người dùng" },
   { id: "courses", label: "Khóa học" },
+  { id: "lectureApproval", label: "Duyệt bài giảng" },
   { id: "vocab", label: "Bộ từ vựng (Free)" },
   { id: "reports", label: "Doanh thu" },
   // { id: "settings", label: "Cài đặt" },
@@ -89,6 +91,10 @@ export default function AdminHomePage() {
           {loadingCourses ? <div className="rounded-xl bg-white border p-6 text-center text-slate-500">Đang tải...</div> : <CoursesTable courses={courses} onUpdated={() => api.get("/courses").then(r => setCourses(Array.isArray(r.data) ? r.data : []))} />}
         </div>
       );
+    }
+
+    if (activeSection === "lectureApproval") {
+      return <LectureApprovalSection />;
     }
 
     if (activeSection === "reports") {
