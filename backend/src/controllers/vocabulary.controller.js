@@ -19,6 +19,27 @@ exports.createTopic = async (req, res) => {
   }
 };
 
+exports.updateTopic = async (req, res) => {
+  try {
+    const { topicId } = req.params;
+    const { title } = req.body;
+    const data = await vocabularyService.updateVocabularyTopic(topicId, title);
+    return res.json({ message: "updated", data });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
+exports.deleteTopic = async (req, res) => {
+  try {
+    const { topicId } = req.params;
+    await vocabularyService.deleteVocabularyTopic(topicId);
+    return res.json({ message: "deleted" });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+};
+
 exports.getWordsByTopic = async (req, res) => {
   try {
     const { topicId } = req.params;

@@ -6,6 +6,9 @@ function CreateCourseForm({ users = [], onCreated }) {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState(0);
   const [teacherId, setTeacherId] = useState("");
+  const [startAt, setStartAt] = useState("");
+  const [endAt, setEndAt] = useState("");
+  const [status, setStatus] = useState("DRAFT");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -29,11 +32,17 @@ function CreateCourseForm({ users = [], onCreated }) {
         description: description.trim() || null,
         price: Number(price) || 0,
         teacher_id: teacherId,
+        start_at: startAt ? new Date(startAt).toISOString() : null,
+        end_at: endAt ? new Date(endAt).toISOString() : null,
+        status,
       });
       setTitle("");
       setDescription("");
       setPrice(0);
       setTeacherId("");
+      setStartAt("");
+      setEndAt("");
+      setStatus("DRAFT");
       onCreated?.();
     } catch (err) {
       setError(err.response?.data?.message || "Lỗi khi tạo khóa học");
@@ -74,6 +83,38 @@ function CreateCourseForm({ users = [], onCreated }) {
           className="w-full px-3 py-2 border rounded text-sm"
           min={0}
         />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Bắt đầu</label>
+          <input
+            type="datetime-local"
+            value={startAt}
+            onChange={(e) => setStartAt(e.target.value)}
+            className="w-full px-3 py-2 border rounded text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Kết thúc</label>
+          <input
+            type="datetime-local"
+            value={endAt}
+            onChange={(e) => setEndAt(e.target.value)}
+            className="w-full px-3 py-2 border rounded text-sm"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs text-slate-500 mb-1">Trạng thái</label>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className="w-full px-3 py-2 border rounded text-sm"
+        >
+          <option value="DRAFT">Nháp</option>
+          <option value="ON_SALE">Đang bán</option>
+          <option value="ARCHIVED">Ẩn (lưu trữ)</option>
+        </select>
       </div>
       <div>
         <label className="block text-xs text-slate-500 mb-1">Giáo viên *</label>

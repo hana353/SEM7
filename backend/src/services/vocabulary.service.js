@@ -46,6 +46,38 @@ async function createVocabularyTopic(title) {
   return data;
 }
 
+async function updateVocabularyTopic(topicId, title) {
+  if (!topicId) throw new Error("topicId là bắt buộc");
+  if (!title || !title.trim()) throw new Error("title là bắt buộc");
+
+  const { data, error } = await supabase
+    .from("vocabulary_topics")
+    .update({ title: title.trim() })
+    .eq("id", topicId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function deleteVocabularyTopic(topicId) {
+  if (!topicId) throw new Error("topicId là bắt buộc");
+
+  const { count, error: cntError } = await supabase
+    .from("vocabularies")
+    .select("id", { count: "exact", head: true })
+    .eq("topic_id", topicId);
+
+  if (cntError) throw new Error(cntError.message);
+  if ((count || 0) > 0) {
+    throw new Error("Không thể xóa chủ đề khi vẫn còn từ vựng bên trong");
+  }
+
+  const { error } = await supabase.from("vocabulary_topics").delete().eq("id", topicId);
+  if (error) throw new Error(error.message);
+}
+
 async function getWordsByTopic(topicId) {
   if (!topicId) throw new Error("topicId là bắt buộc");
 
@@ -160,6 +192,8 @@ async function getRemindWordsForStudent(studentId, limit = 20) {
 module.exports = {
   getVocabularyTopics,
   createVocabularyTopic,
+  updateVocabularyTopic,
+  deleteVocabularyTopic,
   getWordsByTopic,
   createVocabularyWord,
   logPronunciationPractice,
