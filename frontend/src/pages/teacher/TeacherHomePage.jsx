@@ -21,6 +21,7 @@ export default function TeacherHomePage() {
   const navigate = useNavigate();
   const user = getStoredUser();
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [selectedCourseId, setSelectedCourseId] = useState(null);
   const [assignedCourses, setAssignedCourses] = useState([]);
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState({});
@@ -52,7 +53,8 @@ export default function TeacherHomePage() {
   }, []);
 
   const handleCourseClick = (courseId) => {
-    navigate(`/teacher/course/${courseId}`);
+    setSelectedCourseId(courseId);
+    setActiveSection("courseDetail");
   };
 
   const renderContent = () => {
@@ -70,6 +72,20 @@ export default function TeacherHomePage() {
 
     if (activeSection === "myCourses") {
       return <CoursesSection courses={assignedCourses} loading={loadingCourses} onCourseClick={handleCourseClick} />;
+    }
+
+    if (activeSection === "courseDetail" && selectedCourseId) {
+      const TeacherCourseDetail = require("./TeacherCourseDetail").default;
+      return (
+        <TeacherCourseDetail
+          embedded
+          courseId={selectedCourseId}
+          onBack={() => {
+            setActiveSection("myCourses");
+            setSelectedCourseId(null);
+          }}
+        />
+      );
     }
 
     if (activeSection === "notifications") {

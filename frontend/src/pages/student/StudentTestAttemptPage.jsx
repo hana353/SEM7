@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../../api/axios";
+
+function formatCountdown(totalSeconds) {
+  const sec = Math.max(0, Math.floor(totalSeconds || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
 
 export default function StudentTestAttemptPage() {
   const { attemptId } = useParams();
@@ -11,6 +20,8 @@ export default function StudentTestAttemptPage() {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [timeLeftSec, setTimeLeftSec] = useState(null);
+  const autoSubmittedRef = useRef(false);
 
   useEffect(() => {
     api
@@ -28,6 +39,54 @@ export default function StudentTestAttemptPage() {
     });
     setAnswers((a) => ({ ...initial, ...a }));
   }, [data]);
+
+  useEffect(() => {
+    if (!data?.attempt) return;
+    if (data.attempt?.status !== "IN_PROGRESS") return;
+
+    autoSubmittedRef.current = false;
+
+    let deadlineMs = null;
+    if (data.attempt.expires_at) {
+      const t = new Date(data.attempt.expires_at).getTime();
+      if (!Number.isNaN(t)) deadlineMs = t;
+    }
+
+    if (!deadlineMs && data.attempt.time_limit_seconds) {
+      const start = new Date(data.attempt.started_at).getTime();
+      const limit = Number(data.attempt.time_limit_seconds);
+      if (!Number.isNaN(start) && Number.isFinite(limit) && limit > 0) {
+        deadlineMs = start + limit * 1000;
+      }
+    }
+
+    if (!deadlineMs) {
+      setTimeLeftSec(null);
+      return;
+    }
+
+    const tick = () => {
+      const diffMs = deadlineMs - Date.now();
+      const left = Math.ceil(diffMs / 1000);
+      setTimeLeftSec(left);
+
+      if (left <= 0 && !autoSubmittedRef.current) {
+        autoSubmittedRef.current = true;
+        api
+          .post(`/tests/attempts/${attemptId}/submit`)
+          .then(() => navigate(`/student/attempt/${attemptId}/review`))
+          .catch(() => {
+            // Backend cũng sẽ auto-submit khi quá hạn,
+            // nên nếu request fail thì chỉ cần refresh trang.
+            window.location.reload();
+          });
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [data?.attempt?.expires_at, data?.attempt?.time_limit_seconds, data?.attempt?.started_at, data?.attempt?.status, attemptId, navigate]);
 
   if (loading) return <div className="p-6 text-center text-slate-500">Đang tải...</div>;
   if (error || !data) return <div className="p-6 text-center text-red-500">{error || "Không tìm thấy bài làm"}</div>;
@@ -71,6 +130,16 @@ export default function StudentTestAttemptPage() {
       <div className="mb-4">
         <div className="flex justify-between text-xs text-slate-500 mb-1">
           <span>Câu {currentQ + 1} / {total}</span>
+          {timeLeftSec !== null && (
+            <span
+              className={`font-semibold ${
+                timeLeftSec <= 60 ? "text-rose-600" : "text-slate-700"
+              }`}
+              title="Thời gian còn lại"
+            >
+              ⏱ {formatCountdown(timeLeftSec)}
+            </span>
+          )}
         </div>
         <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
           <div

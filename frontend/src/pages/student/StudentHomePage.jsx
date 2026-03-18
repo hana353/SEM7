@@ -5,6 +5,7 @@ import MyCourses from "./MyCourses";
 import SuggestedCourses from "./SuggestedCourses";
 import VocabularyPractice from "./VocabularyPractice";
 import Profile from "./Profile";
+import StudentCourseDetail from "./StudentCourseDetail";
 import { clearSession, getStoredUser } from "../../auth/session";
 
 const sidebarItems = [
@@ -19,13 +20,34 @@ const StudentHomePage = () => {
   const navigate = useNavigate();
   const user = getStoredUser();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedCourseId, setSelectedCourseId] = useState(null);
 
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
         return <Dashboard />;
       case "myCourses":
-        return <MyCourses />;
+        return (
+          <MyCourses
+            onOpenCourse={(id) => {
+              setSelectedCourseId(id);
+              setActiveTab("courseDetail");
+            }}
+          />
+        );
+      case "courseDetail":
+        return selectedCourseId ? (
+          <StudentCourseDetail
+            embedded
+            courseId={selectedCourseId}
+            onBack={() => {
+              setSelectedCourseId(null);
+              setActiveTab("myCourses");
+            }}
+          />
+        ) : (
+          <MyCourses />
+        );
       case "suggestedCourses":
         return <SuggestedCourses />;
       case "vocabulary":
@@ -38,9 +60,9 @@ const StudentHomePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-slate-50 flex flex-col">
+      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900 text-slate-50 flex flex-col">
         <div className="px-5 py-4 border-b border-slate-800">
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Student
@@ -89,8 +111,8 @@ const StudentHomePage = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col">
-        <header className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur flex items-center justify-between px-6">
+      <main className="flex-1 flex flex-col ml-64 min-w-0">
+        <header className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur flex items-center justify-between px-6 sticky top-0 z-10">
           <div>
             <h1 className="text-sm font-semibold text-slate-900">
               Không gian học tập của bạn

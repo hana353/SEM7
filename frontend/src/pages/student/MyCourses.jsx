@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 
-const MyCourses = () => {
-  const navigate = useNavigate();
+const MyCourses = ({ onOpenCourse }) => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -90,7 +88,7 @@ const MyCourses = () => {
               </div>
               <button
                 type="button"
-                onClick={() => navigate(`/student/course/${course.id}`)}
+                onClick={() => (onOpenCourse ? onOpenCourse(course.id) : null)}
                 className="mt-3 inline-flex items-center justify-center rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
               >
                 Vào học

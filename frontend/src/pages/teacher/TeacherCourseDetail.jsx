@@ -352,6 +352,7 @@ function AddFlashcardModal({ courseId, onClose, onSuccess }) {
 function AddTestModal({ courseId, onClose, onSuccess }) {
   const [title, setTitle] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(15);
+  const [maxAttempts, setMaxAttempts] = useState(1);
   const [status, setStatus] = useState("DRAFT");
   const [questions, setQuestions] = useState([
     { question: "", choices: [{ text: "", isCorrect: false }, { text: "", isCorrect: false }, { text: "", isCorrect: false }, { text: "", isCorrect: false }] },
@@ -410,6 +411,7 @@ function AddTestModal({ courseId, onClose, onSuccess }) {
         course_id: courseId,
         title: title.trim(),
         duration_minutes: Number(durationMinutes) || 15,
+        max_attempts: maxAttempts === "" || maxAttempts === null ? null : Number(maxAttempts),
         status,
       });
       const testId = testRes.data?.data?.id;
@@ -469,6 +471,17 @@ function AddTestModal({ courseId, onClose, onSuccess }) {
                 onChange={(e) => setDurationMinutes(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Giới hạn số lần làm</label>
+              <input
+                type="number"
+                min={1}
+                value={maxAttempts}
+                onChange={(e) => setMaxAttempts(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">Ví dụ: 1 nghĩa là học sinh chỉ được làm 1 lần.</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
@@ -548,13 +561,228 @@ function AddTestModal({ courseId, onClose, onSuccess }) {
   );
 }
 
+function EditTestModal({ testId, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  const [title, setTitle] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState(15);
+  const [maxAttempts, setMaxAttempts] = useState(1);
+  const [status, setStatus] = useState("DRAFT");
+
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    api
+      .get(`/tests/teacher/${testId}`)
+      .then((r) => {
+        const t = r.data?.data;
+        setTitle(t?.title || "");
+        setDurationMinutes(t?.duration_minutes ?? 15);
+        setMaxAttempts(t?.max_attempts ?? 1);
+        setStatus(t?.status || "DRAFT");
+      })
+      .catch((e) => setError(e.response?.data?.message || "Không tải được bài test"))
+      .finally(() => setLoading(false));
+  }, [testId]);
+
+  const save = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await api.patch(`/tests/teacher/${testId}`, {
+        title: title.trim(),
+        duration_minutes: Number(durationMinutes) || 15,
+        max_attempts: maxAttempts === "" || maxAttempts === null ? null : Number(maxAttempts),
+        status,
+      });
+      onSuccess?.();
+      onClose?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể cập nhật bài test");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async () => {
+    setDeleting(true);
+    setError("");
+    try {
+      await api.delete(`/tests/teacher/${testId}`);
+      onSuccess?.();
+      onClose?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể xóa bài test");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+          <h3 className="text-sm font-semibold text-slate-900">Chỉnh sửa bài test</h3>
+          <button type="button" onClick={onClose} className="text-xs text-slate-500 hover:text-slate-700">
+            Đóng
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          {loading ? (
+            <p className="text-sm text-slate-500">Đang tải...</p>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Tiêu đề</label>
+                <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Thời gian (phút)</label>
+                  <input type="number" min={1} value={durationMinutes} onChange={(e) => setDurationMinutes(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Số lần làm</label>
+                  <input type="number" min={1} value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
+                <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white">
+                  <option value="DRAFT">Nháp</option>
+                  <option value="PUBLISHED">Mở cho học sinh</option>
+                  <option value="CLOSED">Đóng</option>
+                </select>
+              </div>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={save} disabled={saving || !title.trim()} className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+                  {saving ? "Đang lưu…" : "Lưu"}
+                </button>
+                <button type="button" onClick={del} disabled={deleting} className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-60">
+                  {deleting ? "Đang xóa…" : "Xóa"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ========== MODAL XEM CHI TIẾT FLASHCARD ========== */
-function FlashcardDetailModal({ setId, onClose }) {
+function FlashcardDetailModal({ setId, onClose, onChanged }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [title, setTitle] = useState("");
+  const [status, setStatus] = useState("DRAFT");
+  const [adding, setAdding] = useState({ front: "", back: "" });
   useEffect(() => {
-    api.get(`/flashcards/teacher/${setId}`).then((r) => setData(r.data?.data)).catch(() => setData(null)).finally(() => setLoading(false));
+    setLoading(true);
+    setError("");
+    api
+      .get(`/flashcards/teacher/${setId}`)
+      .then((r) => {
+        setData(r.data?.data);
+        setTitle(r.data?.data?.title || "");
+        setStatus(r.data?.data?.status || "DRAFT");
+      })
+      .catch((e) => {
+        setError(e.response?.data?.message || "Không tải được dữ liệu");
+        setData(null);
+      })
+      .finally(() => setLoading(false));
   }, [setId]);
+
+  const refresh = async () => {
+    const r = await api.get(`/flashcards/teacher/${setId}`);
+    setData(r.data?.data);
+    setTitle(r.data?.data?.title || "");
+    setStatus(r.data?.data?.status || "DRAFT");
+  };
+
+  const saveSet = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await api.patch(`/flashcards/teacher/${setId}`, { title: title.trim(), status });
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể cập nhật flashcard");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteSet = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await api.delete(`/flashcards/teacher/${setId}`);
+      onChanged?.();
+      onClose?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể xóa flashcard");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addCard = async () => {
+    if (!adding.front.trim() || !adding.back.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      const pos = (data?.cards || []).length;
+      await api.post(`/flashcards/teacher/${setId}/cards`, {
+        front_text: adding.front.trim(),
+        back_text: adding.back.trim(),
+        position: pos,
+      });
+      setAdding({ front: "", back: "" });
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể thêm thẻ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateCard = async (cardId, patch) => {
+    setSaving(true);
+    setError("");
+    try {
+      await api.patch(`/flashcards/teacher/cards/${cardId}`, patch);
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể cập nhật thẻ");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCard = async (cardId) => {
+    setSaving(true);
+    setError("");
+    try {
+      await api.delete(`/flashcards/teacher/cards/${cardId}`);
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "Không thể xóa thẻ");
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl my-8 max-h-[85vh] overflow-hidden flex flex-col">
@@ -563,16 +791,73 @@ function FlashcardDetailModal({ setId, onClose }) {
           <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-700">Đóng</button>
         </div>
         <div className="p-4 overflow-y-auto flex-1">
-          {loading ? <p className="text-slate-500">Đang tải...</p> : !data ? <p className="text-slate-500">Không tải được dữ liệu</p> : (
+          {loading ? <p className="text-slate-500">Đang tải...</p> : !data ? <p className="text-slate-500">{error || "Không tải được dữ liệu"}</p> : (
             <>
-              <p className="text-xs text-slate-600 mb-3">Flashcard: {data.title}</p>
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 mb-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Tiêu đề</label>
+                    <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Trạng thái</label>
+                    <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white">
+                      <option value="DRAFT">Nháp</option>
+                      <option value="PUBLISHED">Mở cho học sinh</option>
+                      <option value="ARCHIVED">Ẩn</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <button type="button" onClick={saveSet} disabled={saving || !title.trim()} className="flex-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+                      Lưu
+                    </button>
+                    <button type="button" onClick={deleteSet} disabled={saving} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-60">
+                      Xóa
+                    </button>
+                  </div>
+                </div>
+                {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 p-3 mb-4">
+                <p className="text-xs font-semibold text-slate-700 mb-2">Thêm thẻ mới</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input value={adding.front} onChange={(e) => setAdding((x) => ({ ...x, front: e.target.value }))} className="w-full rounded border border-slate-300 px-2 py-2 text-sm" placeholder="Mặt trước" />
+                  <input value={adding.back} onChange={(e) => setAdding((x) => ({ ...x, back: e.target.value }))} className="w-full rounded border border-slate-300 px-2 py-2 text-sm" placeholder="Mặt sau" />
+                </div>
+                <button type="button" onClick={addCard} disabled={saving || !adding.front.trim() || !adding.back.trim()} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-60">
+                  + Thêm thẻ
+                </button>
+              </div>
+
               {(data.cards || []).length === 0 ? <p className="text-slate-500">Chưa có thẻ</p> : (
                 <ul className="space-y-3">
                   {(data.cards || []).map((card, i) => (
                     <li key={card.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50">
                       <p className="text-xs font-medium text-slate-600">Thẻ {i + 1}</p>
-                      <p className="text-sm text-slate-900 mt-1">Mặt trước: {card.front_text}</p>
-                      <p className="text-sm text-slate-700 mt-1">Mặt sau: {card.back_text}</p>
+                      <div className="grid gap-2 sm:grid-cols-2 mt-2">
+                        <input
+                          defaultValue={card.front_text}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v && v !== card.front_text) updateCard(card.id, { front_text: v });
+                          }}
+                          className="w-full rounded border border-slate-300 px-2 py-2 text-sm bg-white"
+                        />
+                        <input
+                          defaultValue={card.back_text}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v && v !== card.back_text) updateCard(card.id, { back_text: v });
+                          }}
+                          className="w-full rounded border border-slate-300 px-2 py-2 text-sm bg-white"
+                        />
+                      </div>
+                      <div className="mt-2 flex justify-end">
+                        <button type="button" onClick={() => deleteCard(card.id)} disabled={saving} className="text-xs px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-60">
+                          Xóa thẻ
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -664,8 +949,9 @@ function TestAttemptsModal({ testId, onClose }) {
   );
 }
 
-export default function TeacherCourseDetail() {
-  const { courseId } = useParams();
+export default function TeacherCourseDetail({ courseId: courseIdProp, embedded = false, onBack }) {
+  const params = useParams();
+  const courseId = courseIdProp || params.courseId;
   const navigate = useNavigate();
   const [course, setCourse] = useState(null);
   const [activeTab, setActiveTab] = useState("lectures");
@@ -681,6 +967,7 @@ export default function TeacherCourseDetail() {
   const [flashcardDetailModal, setFlashcardDetailModal] = useState(null);
   const [testDetailModal, setTestDetailModal] = useState(null);
   const [testAttemptsModal, setTestAttemptsModal] = useState(null);
+  const [editTestModal, setEditTestModal] = useState(null);
 
   const refresh = () => {
     if (!courseId) return;
@@ -701,28 +988,53 @@ export default function TeacherCourseDetail() {
     refresh();
   }, [courseId, activeTab]);
 
-  if (loading) return <div className="p-6 text-center">Đang tải...</div>;
+  if (loading) return <div className="p-6 text-center text-slate-500">Đang tải...</div>;
   if (error) return <div className="p-6 text-red-500">{error}</div>;
   if (!course) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b px-6 py-4">
-        <button type="button" onClick={() => navigate("/teacher?section=myCourses")} className="text-sm text-slate-500 hover:text-slate-700 mb-2">
-          ← Quay lại
-        </button>
-        <h1 className="text-xl font-semibold text-slate-900">{course.title}</h1>
-        <p className="text-sm text-slate-500">{course.description || "Chưa có mô tả"}</p>
-      </header>
+    <div className={embedded ? "" : "min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100"}>
+      {!embedded && (
+        <header className="bg-white/80 backdrop-blur border-b px-6 py-4">
+          <button
+            type="button"
+            onClick={() => navigate("/teacher?section=myCourses")}
+            className="text-sm text-slate-500 hover:text-slate-700 mb-2"
+          >
+            ← Quay lại
+          </button>
+          <h1 className="text-xl font-semibold text-slate-900">{course.title}</h1>
+          <p className="text-sm text-slate-500">{course.description || "Chưa có mô tả"}</p>
+        </header>
+      )}
 
-      <div className="p-6">
+      <div className={embedded ? "" : "p-6"}>
+        {embedded && (
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">{course.title}</h2>
+              <p className="text-xs text-slate-500">{course.description || "Chưa có mô tả"}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => (onBack ? onBack() : navigate("/teacher?section=myCourses"))}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              ← Quay lại khóa học của tôi
+            </button>
+          </div>
+        )}
         <div className="flex gap-2 mb-6">
           {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === t.id ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                activeTab === t.id
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+              }`}
             >
               {t.label}
             </button>
@@ -730,13 +1042,13 @@ export default function TeacherCourseDetail() {
         </div>
 
         {activeTab === "lectures" && (
-          <div className="bg-white rounded-xl border p-6">
+          <div className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold">Bài giảng</h2>
               <button
                 type="button"
                 onClick={() => setShowLectureModal(true)}
-                className="px-3 py-1.5 bg-slate-900 text-white text-sm rounded-lg hover:bg-slate-800"
+                className="px-3 py-2 bg-slate-900 text-white text-sm rounded-xl hover:bg-slate-800 shadow-sm"
               >
                 + Thêm bài giảng
               </button>
@@ -783,13 +1095,13 @@ export default function TeacherCourseDetail() {
         )}
 
         {activeTab === "flashcards" && (
-          <div className="bg-white rounded-xl border p-6">
+          <div className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold">Flashcard</h2>
               <button
                 type="button"
                 onClick={() => setShowFlashcardModal(true)}
-                className="px-3 py-1.5 bg-slate-900 text-white text-sm rounded-lg hover:bg-slate-800"
+                className="px-3 py-2 bg-slate-900 text-white text-sm rounded-xl hover:bg-slate-800 shadow-sm"
               >
                 + Tạo flashcard
               </button>
@@ -813,13 +1125,13 @@ export default function TeacherCourseDetail() {
         )}
 
         {activeTab === "tests" && (
-          <div className="bg-white rounded-xl border p-6">
+          <div className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold">Bài test</h2>
               <button
                 type="button"
                 onClick={() => setShowTestModal(true)}
-                className="px-3 py-1.5 bg-slate-900 text-white text-sm rounded-lg hover:bg-slate-800"
+                className="px-3 py-2 bg-slate-900 text-white text-sm rounded-xl hover:bg-slate-800 shadow-sm"
               >
                 + Tạo bài test
               </button>
@@ -834,6 +1146,7 @@ export default function TeacherCourseDetail() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{t.status || "DRAFT"}</span>
                       <button type="button" onClick={() => setTestDetailModal(t.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem câu hỏi</button>
+                      <button type="button" onClick={() => setEditTestModal(t.id)} className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-100">Sửa</button>
                       <button type="button" onClick={() => setTestAttemptsModal(t.id)} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500">Lịch sử làm bài</button>
                     </div>
                   </li>
@@ -852,9 +1165,10 @@ export default function TeacherCourseDetail() {
       )}
       {showFlashcardModal && <AddFlashcardModal courseId={courseId} onClose={() => setShowFlashcardModal(false)} onSuccess={refresh} />}
       {showTestModal && <AddTestModal courseId={courseId} onClose={() => setShowTestModal(false)} onSuccess={refresh} />}
-      {flashcardDetailModal && <FlashcardDetailModal setId={flashcardDetailModal} onClose={() => setFlashcardDetailModal(null)} />}
+      {flashcardDetailModal && <FlashcardDetailModal setId={flashcardDetailModal} onClose={() => setFlashcardDetailModal(null)} onChanged={refresh} />}
       {testDetailModal && <TestDetailModal testId={testDetailModal} onClose={() => setTestDetailModal(null)} />}
       {testAttemptsModal && <TestAttemptsModal testId={testAttemptsModal} onClose={() => setTestAttemptsModal(null)} />}
+      {editTestModal && <EditTestModal testId={editTestModal} onClose={() => setEditTestModal(null)} onSuccess={refresh} />}
     </div>
   );
 }

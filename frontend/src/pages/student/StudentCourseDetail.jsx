@@ -8,8 +8,9 @@ const tabs = [
   { id: "tests", label: "Bài test" },
 ];
 
-export default function StudentCourseDetail() {
-  const { courseId } = useParams();
+export default function StudentCourseDetail({ courseId: courseIdProp, embedded = false, onBack }) {
+  const params = useParams();
+  const courseId = courseIdProp || params.courseId;
   const navigate = useNavigate();
 
   const [course, setCourse] = useState(null);
@@ -150,20 +151,42 @@ export default function StudentCourseDetail() {
     !checkingEnrollment;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b px-6 py-4">
-        <button
-          type="button"
-          onClick={() => navigate("/studenthomepage")}
-          className="text-sm text-slate-500 hover:text-slate-700 mb-2"
-        >
-          ← Quay lại
-        </button>
-        <h1 className="text-xl font-semibold text-slate-900">{course.title}</h1>
-        <p className="text-sm text-slate-500">
-          {course.description || "Chưa có mô tả cho khóa học này."}
-        </p>
+    <div className={embedded ? "" : "min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100"}>
+      {!embedded && (
+        <header className="bg-white/80 backdrop-blur border-b px-6 py-4">
+          <button
+            type="button"
+            onClick={() => navigate("/studenthomepage")}
+            className="text-sm text-slate-500 hover:text-slate-700 mb-2"
+          >
+            ← Quay lại
+          </button>
+          <h1 className="text-xl font-semibold text-slate-900">{course.title}</h1>
+          <p className="text-sm text-slate-500">
+            {course.description || "Chưa có mô tả cho khóa học này."}
+          </p>
+        </header>
+      )}
 
+      {embedded && (
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">{course.title}</h2>
+            <p className="text-xs text-slate-500">
+              {course.description || "Chưa có mô tả cho khóa học này."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => (onBack ? onBack() : navigate("/studenthomepage"))}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ← Quay lại khóa học của tôi
+          </button>
+        </div>
+      )}
+
+      <header className={embedded ? "mb-4" : ""}>
         {checkingEnrollment ? (
           <p className="mt-2 text-sm text-slate-500">Đang kiểm tra trạng thái đăng ký…</p>
         ) : isEnrolled ? (
@@ -222,17 +245,17 @@ export default function StudentCourseDetail() {
       </header>
 
       {isEnrolled && (
-        <div className="p-6 space-y-6">
+        <div className={embedded ? "space-y-6" : "p-6 space-y-6"}>
           <div className="flex gap-2 mb-2">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
                   activeTab === tab.id
-                    ? "bg-slate-900 text-white"
-                    : "bg-white text-slate-600 hover:bg-slate-100"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
                 }`}
               >
                 {tab.label}
@@ -241,7 +264,7 @@ export default function StudentCourseDetail() {
           </div>
 
           {activeTab === "lectures" && (
-            <section className="bg-white rounded-xl border p-6">
+            <section className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">
                 Danh sách bài giảng
               </h2>
@@ -282,7 +305,7 @@ export default function StudentCourseDetail() {
           )}
 
           {activeTab === "flashcards" && (
-            <section className="bg-white rounded-xl border p-6">
+            <section className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">
                 Flashcard của khóa học
               </h2>
@@ -320,7 +343,7 @@ export default function StudentCourseDetail() {
           )}
 
           {activeTab === "tests" && (
-            <section className="bg-white rounded-xl border p-6">
+            <section className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">
                 Bài test của khóa học
               </h2>
