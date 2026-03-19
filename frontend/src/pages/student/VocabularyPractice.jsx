@@ -477,31 +477,6 @@ const VocabularyPractice = () => {
               <p className="text-xs font-semibold text-gray-700">
                 Luyện phát âm (voice-to-text)
               </p>
-              <div className="mt-2 flex flex-wrap gap-3 items-center text-xs text-gray-600">
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={useGemini}
-                    onChange={(e) => setUseGemini(e.target.checked)}
-                  />
-                  Dùng Gemini AI (backend)
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={echoResult}
-                    onChange={(e) => setEchoResult(e.target.checked)}
-                  />
-                  Đọc lại kết quả (text-to-speech)
-                </label>
-              </div>
-              {!speechSupported && (
-                <p className="text-xs text-red-500 mt-1">
-                  Trình duyệt của bạn chưa hỗ trợ Web Speech API. Bạn có thể mô
-                  tả luồng này trong báo cáo, hoặc tích hợp API ngoài (Google
-                  Cloud Speech, Azure...) ở backend.
-                </p>
-              )}
               {speechSupported && (
                 <>
                   <p className="text-xs text-gray-500 mt-1">
@@ -533,10 +508,10 @@ const VocabularyPractice = () => {
 
             <button
               type="button"
-              disabled={!currentWord || isListening || (!useGemini && !speechSupported)}
+              disabled={!currentWord || isListening}
               onClick={startListening}
               className={`px-4 py-2 rounded-lg text-xs font-semibold shadow-sm ${
-                !currentWord || (!useGemini && !speechSupported)
+                !currentWord
                   ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                   : isListening
                     ? "bg-red-500 text-white"
@@ -547,11 +522,7 @@ const VocabularyPractice = () => {
                 ? "Chọn chủ đề & từ"
                 : isListening
                   ? "Đang xử lý..."
-                  : useGemini
-                    ? "Bắt đầu (Gemini)"
-                    : !speechSupported
-                      ? "Không hỗ trợ voice-to-text"
-                      : "Bắt đầu (Browser)"}
+                  : "Bắt đầu đọc"}
             </button>
           </div>
         </section>

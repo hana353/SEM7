@@ -8,6 +8,7 @@ import StudentsSection from "./StudentsSection";
 import RevenueSection from "./RevenueSection";
 import ProfileSection from "./ProfileSection";
 import NotificationsSection from "./NotificationsSection";
+import TeacherDashboardInsights from "./TeacherDashboardInsights";
 
 const sidebarItems = [
   { id: "dashboard", label: "Tổng quan" },
@@ -28,6 +29,7 @@ export default function TeacherHomePage() {
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     api.get("/courses/teacher/assigned")
@@ -61,10 +63,29 @@ export default function TeacherHomePage() {
     if (activeSection === "dashboard") {
       return (
         <div className="space-y-6">
-          <SummaryCards totalCourses={assignedCourses.length} stats={stats} />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <CoursesSection courses={assignedCourses} loading={loadingCourses} onCourseClick={handleCourseClick} />
-            <StudentsSection students={students} loading={loadingStudents} />
+          {loadingStats ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+              Đang tải số liệu tổng quan...
+            </div>
+          ) : (
+            <SummaryCards totalCourses={assignedCourses.length} stats={stats} />
+          )}
+
+          {loadingStats ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+              Đang tải biểu đồ dashboard...
+            </div>
+          ) : (
+            <TeacherDashboardInsights stats={stats} />
+          )}
+
+          <div className="grid gap-6 xl:grid-cols-12">
+            <div className="xl:col-span-7">
+              <CoursesSection courses={assignedCourses} loading={loadingCourses} onCourseClick={handleCourseClick} />
+            </div>
+            <div className="xl:col-span-5">
+              <StudentsSection students={students} loading={loadingStudents} />
+            </div>
           </div>
         </div>
       );
@@ -108,8 +129,21 @@ export default function TeacherHomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900 text-slate-50 flex flex-col z-10">
+    <div className="min-h-screen bg-linear-to-br from-slate-100 via-slate-50 to-blue-50 flex">
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Đóng menu"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-10 bg-slate-900/40 md:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 bottom-0 w-64 bg-linear-to-b from-slate-900 via-slate-900 to-slate-800 text-slate-50 flex flex-col z-20 shadow-2xl shadow-slate-900/20 transform transition-transform duration-300 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0`}
+      >
         <div className="shrink-0 px-5 py-4 border-b border-slate-800">
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Teacher
@@ -125,7 +159,10 @@ export default function TeacherHomePage() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveSection(item.id)}
+                onClick={() => {
+                  setActiveSection(item.id);
+                  setSidebarOpen(false);
+                }}
                 className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left transition ${
                   isActive
                     ? "bg-slate-100 text-slate-900"
@@ -156,19 +193,30 @@ export default function TeacherHomePage() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col ml-64 min-w-0">
-        <header className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur flex items-center justify-between px-6">
+      <main className="flex-1 flex flex-col md:ml-64 min-w-0">
+        <header className="h-16 border-b border-slate-200 bg-white/90 backdrop-blur flex items-center justify-between px-4 sm:px-6">
           <div>
-            <h1 className="text-sm font-semibold text-slate-900">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="mb-1 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 md:hidden"
+              aria-label="Mở menu"
+            >
+              ≡
+            </button>
+            <h1 className="text-base font-bold text-slate-900">
               Bảng điều khiển giảng dạy
             </h1>
             <p className="text-xs text-slate-500">
               Quản lý khóa học, bài giảng, học viên và doanh thu của bạn.
             </p>
           </div>
+          <div className="hidden sm:flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+            Cập nhật: {new Date().toLocaleDateString("vi-VN")}
+          </div>
         </header>
 
-        <div className="flex-1 px-6 py-5 space-y-6 overflow-y-auto">
+        <div className="flex-1 px-4 sm:px-6 py-5 space-y-6 overflow-y-auto">
           {renderContent()}
         </div>
       </main>

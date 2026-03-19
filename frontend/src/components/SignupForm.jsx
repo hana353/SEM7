@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
 
-export default function SignupForm() {
+export default function SignupForm({ onVerified }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -100,8 +100,12 @@ export default function SignupForm() {
       }
 
       setInfo(data?.message || "Xác thực thành công");
-      // Verify OTP chỉ xác thực email; chưa có token -> quay về trang login để đăng nhập.
-      navigate("/", { replace: true });
+      if (onVerified) {
+        onVerified(data);
+      } else {
+        // Verify OTP chỉ xác thực email; chưa có token -> quay về trang login để đăng nhập.
+        navigate("/", { replace: true });
+      }
     } catch (err) {
       if (err?.name === "TypeError" && String(err?.message).includes("fetch")) {
         setError(

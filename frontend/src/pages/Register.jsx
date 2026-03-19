@@ -1,7 +1,7 @@
-import LoginForm from "../components/LoginForm";
 import { Link } from "react-router-dom";
+import SignupForm from "../components/SignupForm";
 
-export default function Login() {
+export default function Register() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-br from-sky-50 via-white to-indigo-50 px-4 py-6 sm:px-6 sm:py-10">
       <div className="pointer-events-none absolute inset-0">
@@ -24,10 +24,10 @@ export default function Login() {
               English Center
             </p>
             <h1 className="text-3xl font-bold leading-tight sm:text-4xl">
-              Chào mừng bạn quay trở lại
+              Bắt đầu hành trình học tiếng Anh
             </h1>
             <p className="mt-4 text-sm text-indigo-50 sm:text-base">
-              Đăng nhập để tiếp tục khóa học, theo dõi tiến độ và luyện tập mỗi ngày.
+              Đăng ký nhanh để trải nghiệm lộ trình học cá nhân hoá và theo dõi kết quả của bạn.
             </p>
           </div>
 
@@ -35,20 +35,20 @@ export default function Login() {
             <div className="mb-6 grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
               <Link
                 to="/register"
-                className="px-4 py-3 text-center text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                className="bg-indigo-600 px-4 py-3 text-center text-sm font-semibold text-white"
               >
                 Đăng ký
               </Link>
               <Link
                 to="/login"
-                className="bg-indigo-600 px-4 py-3 text-center text-sm font-semibold text-white"
+                className="px-4 py-3 text-center text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
               >
                 Đăng nhập
               </Link>
             </div>
 
             <div className="flex justify-center">
-              <LoginForm />
+              <SignupForm />
             </div>
           </div>
         </div>

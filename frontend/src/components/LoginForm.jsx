@@ -1,15 +1,22 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getHomeRouteByRole } from "../auth/roleRoutes";
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
 
-export default function LoginForm() {
+export default function LoginForm({ onSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const redirectParam = new URLSearchParams(location.search).get("redirect") || "";
+  const safeRedirect =
+    redirectParam.startsWith("/") && !redirectParam.startsWith("//")
+      ? redirectParam
+      : "";
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -42,7 +49,11 @@ export default function LoginForm() {
       }
 
       const roleCode = data?.user?.role_code || null;
-      navigate(getHomeRouteByRole(roleCode), { replace: true });
+      const handledByParent = onSuccess?.(data);
+      if (handledByParent) {
+        return;
+      }
+      navigate(safeRedirect || getHomeRouteByRole(roleCode), { replace: true });
     } catch (err) {
       if (err?.name === "TypeError" && String(err?.message).includes("fetch")) {
         setError(

@@ -12,7 +12,7 @@ function formatPrice(price) {
   return `${Number(price || 0).toLocaleString("vi-VN")} VND`;
 }
 
-export default function ChatWidget() {
+export default function ChatWidget({ onRequireAuth }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -96,7 +96,7 @@ export default function ChatWidget() {
           suggestedCourses: [],
         },
       ]);
-      window.location.href = "/login";
+      onRequireAuth?.("login");
       return;
     }
 

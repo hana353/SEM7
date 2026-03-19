@@ -214,19 +214,33 @@ async function getTeacherStats(teacherId) {
 
   const { data: teacherCourses, error: teacherCoursesError } = await supabase
     .from("courses")
-    .select("id, status")
+    .select("id, title, status, end_at")
     .eq("teacher_id", teacherId);
 
   if (teacherCoursesError) throw new Error(teacherCoursesError.message);
 
+  const now = new Date();
   const draftCourses = (teacherCourses || []).filter((c) => c.status === "DRAFT").length;
+  const expiredCourses = (teacherCourses || []).filter(
+    (c) => c.end_at && new Date(c.end_at).getTime() < now.getTime()
+  ).length;
+  const activeTeachingCourses = (teacherCourses || []).filter((c) => {
+    const isDraft = c.status === "DRAFT";
+    const isArchived = c.status === "ARCHIVED";
+    const isExpired = c.end_at && new Date(c.end_at).getTime() < now.getTime();
+    return !isDraft && !isArchived && !isExpired;
+  }).length;
   const teacherCourseIds = (teacherCourses || []).map((c) => c.id);
 
   let totalRevenue = 0;
+  let revenueByMonth = [];
+  let totalLectures = 0;
+  let lectureByCourse = [];
+
   if (teacherCourseIds.length) {
     const { data: payments, error: paymentsError } = await supabase
       .from("payments")
-      .select("amount, status, course_id")
+      .select("amount, status, course_id, created_at")
       .in("course_id", teacherCourseIds)
       .in("status", SUCCESS_STATUSES);
 
@@ -236,12 +250,59 @@ async function getTeacherStats(teacherId) {
       (sum, p) => sum + Number(p.amount || 0),
       0
     );
+
+    const monthMap = new Map();
+    for (const p of payments || []) {
+      const d = new Date(p.created_at);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + Number(p.amount || 0));
+    }
+
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    revenueByMonth = Array.from({ length: 6 }).map((_, idx) => {
+      const d = new Date(thisMonth.getFullYear(), thisMonth.getMonth() - (5 - idx), 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      return {
+        month_key: key,
+        label: `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(-2)}`,
+        revenue: Number(monthMap.get(key) || 0),
+      };
+    });
+
+    const { data: lectures, error: lecturesError } = await supabase
+      .from("lectures")
+      .select("id, course_id")
+      .in("course_id", teacherCourseIds);
+
+    if (lecturesError) throw new Error(lecturesError.message);
+
+    totalLectures = (lectures || []).length;
+
+    const lectureCountMap = new Map();
+    for (const lec of lectures || []) {
+      const cid = lec.course_id;
+      lectureCountMap.set(cid, (lectureCountMap.get(cid) || 0) + 1);
+    }
+
+    lectureByCourse = (teacherCourses || [])
+      .map((course) => ({
+        course_id: course.id,
+        title: course.title,
+        lecture_count: Number(lectureCountMap.get(course.id) || 0),
+      }))
+      .sort((a, b) => b.lecture_count - a.lecture_count)
+      .slice(0, 6);
   }
 
   return {
     activeStudents,
     totalRevenue,
     draftCourses,
+    activeTeachingCourses,
+    expiredCourses,
+    totalLectures,
+    revenueByMonth,
+    lectureByCourse,
   };
 }
 

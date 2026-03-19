@@ -1,4 +1,12 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import Home from "../pages/Home";
 import Courses from "../pages/Courses";
 import AdminHomePage from "../pages/admin/AdminHomePage";
@@ -12,10 +20,31 @@ import StudentTestReviewPage from "../pages/student/StudentTestReviewPage";
 import PaymentResult from "../pages/student/PaymentResult";
 import ProtectedRoute from "../components/ProtectedRoute";
 import ChatWidget from "../components/chat/ChatWidget";
+import AuthModal from "../components/auth/AuthModal";
 import { getRoleCode, isAuthenticated } from "../auth/session";
 import { getHomeRouteByRole, ROLE } from "../auth/roleRoutes";
 
-function RouteAwareChatWidget() {
+const PENDING_PURCHASE_KEY = "pendingCoursePurchase";
+
+function savePendingPurchase(pendingPurchase) {
+  if (!pendingPurchase?.courseId) return;
+  localStorage.setItem(PENDING_PURCHASE_KEY, JSON.stringify(pendingPurchase));
+}
+
+function readPendingPurchase() {
+  try {
+    const raw = localStorage.getItem(PENDING_PURCHASE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingPurchase() {
+  localStorage.removeItem(PENDING_PURCHASE_KEY);
+}
+
+function RouteAwareChatWidget({ onRequireAuth }) {
   const location = useLocation();
   const roleCode = getRoleCode();
   const authed = isAuthenticated();
@@ -33,19 +62,70 @@ function RouteAwareChatWidget() {
 
   if (!shouldShow) return null;
 
-  return <ChatWidget />;
+  return <ChatWidget onRequireAuth={onRequireAuth} />;
 }
 
 function AppRoutes() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+
+  const openAuthModal = (mode = "login", options = {}) => {
+    if (options?.pendingPurchase) {
+      savePendingPurchase(options.pendingPurchase);
+    }
+    setAuthMode(mode === "register" ? "register" : "login");
+    setAuthOpen(true);
+  };
+
+  const handleLoginSuccess = () => {
+    setAuthOpen(false);
+
+    if (!isAuthenticated()) {
+      return true;
+    }
+
+    const roleCode = getRoleCode();
+    const pendingPurchase = readPendingPurchase();
+
+    if (pendingPurchase?.courseId && roleCode === ROLE.STUDENT) {
+      clearPendingPurchase();
+      navigate(`/courses?focusCourse=${encodeURIComponent(pendingPurchase.courseId)}`, {
+        replace: true,
+      });
+      return true;
+    }
+
+    clearPendingPurchase();
+    navigate(getHomeRouteByRole(roleCode), { replace: true });
+    return true;
+  };
+
+  useEffect(() => {
+    if (location.pathname === "/login") {
+      openAuthModal("login");
+      navigate("/", { replace: true });
+      return;
+    }
+
+    if (location.pathname === "/register") {
+      openAuthModal("register");
+      navigate("/", { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
   return (
     <>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Home onOpenAuthModal={openAuthModal} />} />
         <Route
           path="/app"
           element={<Navigate to={getHomeRouteByRole(getRoleCode())} replace />}
         />
-        <Route path="/courses" element={<Courses />} />
+        <Route path="/login" element={null} />
+        <Route path="/register" element={null} />
+        <Route path="/courses" element={<Courses onOpenAuthModal={openAuthModal} />} />
 
         <Route element={<ProtectedRoute allowRoles={[ROLE.STUDENT]} />}>
           <Route path="/studenthomepage" element={<StudentHomePage />} />
@@ -68,7 +148,15 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <RouteAwareChatWidget />
+      <RouteAwareChatWidget onRequireAuth={openAuthModal} />
+
+      <AuthModal
+        open={authOpen}
+        mode={authMode}
+        onClose={() => setAuthOpen(false)}
+        onModeChange={setAuthMode}
+        onLoginSuccess={handleLoginSuccess}
+      />
     </>
   );
 }

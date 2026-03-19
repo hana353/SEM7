@@ -60,9 +60,14 @@ const StudentHomePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex">
+    <div className="relative min-h-screen bg-linear-to-br from-cyan-50 via-sky-50 to-indigo-100 flex overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 -right-20 h-72 w-72 rounded-full bg-cyan-200/40 blur-3xl" />
+        <div className="absolute top-1/3 -left-24 h-80 w-80 rounded-full bg-indigo-200/30 blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl" />
+      </div>
       {/* Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-slate-900 text-slate-50 flex flex-col">
+      <aside className="fixed left-0 top-0 bottom-0 z-10 w-64 bg-slate-900/95 text-slate-50 flex flex-col backdrop-blur">
         <div className="px-5 py-4 border-b border-slate-800">
           <p className="text-xs uppercase tracking-wide text-slate-400">
             Student
@@ -111,8 +116,8 @@ const StudentHomePage = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col ml-64 min-w-0">
-        <header className="h-14 border-b border-slate-200 bg-white/80 backdrop-blur flex items-center justify-between px-6 sticky top-0 z-10">
+      <main className="relative z-10 flex-1 flex flex-col ml-64 min-w-0">
+        <header className="h-14 border-b border-white/60 bg-white/70 backdrop-blur flex items-center justify-between px-6 sticky top-0 z-10">
           <div>
             <h1 className="text-sm font-semibold text-slate-900">
               Không gian học tập của bạn
