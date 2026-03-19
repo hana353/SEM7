@@ -16,6 +16,7 @@ const paymentRoutes = require("./routes/payment.routes");
 const powerBIRoutes = require("./routes/powerbi.routes");
 const speechRoutes = require("./routes/speech.routes");
 const notificationRoutes = require("./routes/notification.routes");
+const chatRoutes = require("./routes/chat.routes");
 
 process.on("exit", (code) => {
   console.log("Process exit with code:", code);
@@ -56,6 +57,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/powerbi", powerBIRoutes);
 app.use("/api/speech", speechRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/chat", chatRoutes);
 
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

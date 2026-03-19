@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Home from "../pages/Home";
 import Courses from "../pages/Courses";
 import AdminHomePage from "../pages/admin/AdminHomePage";
@@ -11,12 +11,29 @@ import StudentTestAttemptPage from "../pages/student/StudentTestAttemptPage";
 import StudentTestReviewPage from "../pages/student/StudentTestReviewPage";
 import PaymentResult from "../pages/student/PaymentResult";
 import ProtectedRoute from "../components/ProtectedRoute";
-import { getRoleCode } from "../auth/session";
+import { getRoleCode, isAuthenticated } from "../auth/session";
 import { getHomeRouteByRole, ROLE } from "../auth/roleRoutes";
+import ChatWidget from "../components/chat/ChatWidget";
 
-export default function AppRouter() {
+function StudentOnlyChatWidget() {
+  const location = useLocation();
+  const roleCode = getRoleCode();
+  const authed = isAuthenticated();
+
+  const isStudentRoute =
+    location.pathname === "/studenthomepage" ||
+    location.pathname.startsWith("/student/");
+
+  const shouldShow = authed && roleCode === ROLE.STUDENT && isStudentRoute;
+
+  if (!shouldShow) return null;
+
+  return <ChatWidget />;
+}
+
+function AppRoutes() {
   return (
-    <BrowserRouter>
+    <>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route
@@ -45,7 +62,16 @@ export default function AppRouter() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+
+      <StudentOnlyChatWidget />
+    </>
   );
 }
 
+export default function AppRouter() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
+  );
+}
