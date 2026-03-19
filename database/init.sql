@@ -1054,3 +1054,14 @@ LIMIT 20;
 SELECT email, code, type, expires_at, used_at, created_at
 FROM otp_codes
 ORDER BY created_at DESC;
+
+
+CREATE TABLE IF NOT EXISTS chat_leads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(120) NOT NULL,
+  phone VARCHAR(30),
+  email VARCHAR(255),
+  interested_course VARCHAR(255),
+  message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
