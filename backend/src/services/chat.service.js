@@ -89,13 +89,19 @@ function shouldReturnCourses(intentType) {
 async function handleChatMessage({ userId, message }) {
   const cleanMessage = String(message || "").trim();
 
-  if (!userId) throw new Error("userId là bắt buộc");
   if (!cleanMessage) throw new Error("message là bắt buộc");
 
-  const session = await getOrCreateSession(userId);
-  await saveMessage(session.id, "user", cleanMessage, {});
+  const hasUser = Boolean(userId);
+  let session = null;
+  let history = [];
 
-  const history = await getRecentMessages(session.id, 8);
+  // Guest chat works without login; logged-in users still get persistent memory.
+  if (hasUser) {
+    session = await getOrCreateSession(userId);
+    await saveMessage(session.id, "user", cleanMessage, {});
+    history = await getRecentMessages(session.id, 8);
+  }
+
   const intent = detectIntent(cleanMessage);
 
   let courses = [];
@@ -193,20 +199,22 @@ async function handleChatMessage({ userId, message }) {
 
   const cleanAnswer = sanitizeAssistantReply(answer);
 
-  await saveMessage(session.id, "assistant", cleanAnswer, {
-    intentType: intent.type,
-    courses: courses.map((course) => ({
-      id: course.id,
-      title: course.title,
-    })),
-    docs: docs.map((doc) => ({
-      id: doc.id,
-      title: doc.title,
-    })),
-  });
+  if (session?.id) {
+    await saveMessage(session.id, "assistant", cleanAnswer, {
+      intentType: intent.type,
+      courses: courses.map((course) => ({
+        id: course.id,
+        title: course.title,
+      })),
+      docs: docs.map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+      })),
+    });
+  }
 
   return {
-    sessionId: session.id,
+    sessionId: session?.id || null,
     intentType: intent.type,
     answer: cleanAnswer,
     suggestedCourses: shouldReturnCourses(intent.type) ? courses : [],

@@ -11,20 +11,25 @@ import StudentTestAttemptPage from "../pages/student/StudentTestAttemptPage";
 import StudentTestReviewPage from "../pages/student/StudentTestReviewPage";
 import PaymentResult from "../pages/student/PaymentResult";
 import ProtectedRoute from "../components/ProtectedRoute";
+import ChatWidget from "../components/chat/ChatWidget";
 import { getRoleCode, isAuthenticated } from "../auth/session";
 import { getHomeRouteByRole, ROLE } from "../auth/roleRoutes";
-import ChatWidget from "../components/chat/ChatWidget";
 
-function StudentOnlyChatWidget() {
+function RouteAwareChatWidget() {
   const location = useLocation();
   const roleCode = getRoleCode();
   const authed = isAuthenticated();
 
+  const isHomeRoute = location.pathname === "/";
   const isStudentRoute =
     location.pathname === "/studenthomepage" ||
     location.pathname.startsWith("/student/");
+  const isTeacherRoute = location.pathname.startsWith("/teacher");
 
-  const shouldShow = authed && roleCode === ROLE.STUDENT && isStudentRoute;
+  const shouldShow =
+    isHomeRoute ||
+    (authed && roleCode === ROLE.STUDENT && isStudentRoute) ||
+    (authed && roleCode === ROLE.TEACHER && isTeacherRoute);
 
   if (!shouldShow) return null;
 
@@ -63,7 +68,7 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <StudentOnlyChatWidget />
+      <RouteAwareChatWidget />
     </>
   );
 }

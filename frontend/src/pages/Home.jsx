@@ -101,6 +101,7 @@ export default function Home() {
         {/* Right: Auth forms with tabs */}
         <AuthBox />
       </div>
+
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../../api/axios";
+import { getRoleCode, isAuthenticated } from "../../auth/session";
 
 const QUICK_ACTIONS = [
   "Khóa nào phù hợp cho người mới bắt đầu?",
@@ -15,6 +16,7 @@ export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [purchaseLoadingCourseId, setPurchaseLoadingCourseId] = useState("");
   const messagesEndRef = useRef(null);
 
   const [messages, setMessages] = useState([
@@ -77,6 +79,96 @@ export default function ChatWidget() {
       ]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleBuyNow(course) {
+    const courseId = course?.id;
+    if (!courseId || purchaseLoadingCourseId) return;
+
+    if (!isAuthenticated()) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "Bạn cần đăng nhập tài khoản học viên trước khi thanh toán.",
+          suggestedCourses: [],
+        },
+      ]);
+      window.location.href = "/login";
+      return;
+    }
+
+    const roleCode = getRoleCode();
+    if (roleCode !== "STUDENT") {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "Tính năng thanh toán chỉ dành cho tài khoản học viên.",
+          suggestedCourses: [],
+        },
+      ]);
+      return;
+    }
+
+    setPurchaseLoadingCourseId(courseId);
+
+    try {
+      const res = await api.post("/payments/create", {
+        course_id: courseId,
+      });
+
+      const paymentUrl = res.data?.data?.payment_url;
+      const enrolled = res.data?.data?.enrolled;
+
+      if (enrolled) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content:
+              res.data?.message ||
+              "Khóa học miễn phí đã được đăng ký thành công cho bạn.",
+            suggestedCourses: [],
+          },
+        ]);
+        return;
+      }
+
+      if (paymentUrl) {
+        window.location.href = paymentUrl;
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content:
+            res.data?.message ||
+            "Không tạo được link thanh toán. Bạn vui lòng thử lại sau.",
+          suggestedCourses: [],
+        },
+      ]);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content:
+            error.response?.data?.message ||
+            "Không thể xử lý thanh toán lúc này. Bạn thử lại sau nhé.",
+          suggestedCourses: [],
+        },
+      ]);
+    } finally {
+      setPurchaseLoadingCourseId("");
     }
   }
 
@@ -153,6 +245,17 @@ export default function ChatWidget() {
                                 {course.description}
                               </div>
                             )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleBuyNow(course)}
+                              disabled={Boolean(purchaseLoadingCourseId)}
+                              className="mt-3 inline-flex items-center rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              {purchaseLoadingCourseId === course.id
+                                ? "Đang chuyển thanh toán..."
+                                : "Mua ngay"}
+                            </button>
                           </div>
                         ))}
                       </div>
