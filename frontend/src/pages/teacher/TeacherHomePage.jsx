@@ -9,6 +9,7 @@ import RevenueSection from "./RevenueSection";
 import ProfileSection from "./ProfileSection";
 import NotificationsSection from "./NotificationsSection";
 import TeacherDashboardInsights from "./TeacherDashboardInsights";
+import TeacherCourseDetail from "./TeacherCourseDetail";
 
 const sidebarItems = [
   { id: "dashboard", label: "Tổng quan" },
@@ -96,7 +97,6 @@ export default function TeacherHomePage() {
     }
 
     if (activeSection === "courseDetail" && selectedCourseId) {
-      const TeacherCourseDetail = require("./TeacherCourseDetail").default;
       return (
         <TeacherCourseDetail
           embedded
