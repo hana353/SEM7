@@ -12,6 +12,15 @@ function formatPrice(price) {
   return `${Number(price || 0).toLocaleString("vi-VN")} VND`;
 }
 
+function formatDateVn(value) {
+  if (!value) return "Chưa cập nhật";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Chưa cập nhật";
+
+  return date.toLocaleDateString("vi-VN");
+}
+
 export default function ChatWidget({ onRequireAuth }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -188,7 +197,7 @@ export default function ChatWidget({ onRequireAuth }) {
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-40 flex h-[70vh] w-[420px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
+        <div className="fixed bottom-24 right-6 z-40 flex h-[70vh] w-105 max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
           <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-5 py-4">
             <h3 className="text-lg font-semibold text-slate-900">
               Chatbox tư vấn khóa học
@@ -241,8 +250,21 @@ export default function ChatWidget({ onRequireAuth }) {
                             </div>
 
                             <div className="mt-1 text-xs text-slate-500">
-                              {formatPrice(course.price)} •{" "}
-                              {Number(course.total_duration_minutes || 0)} phút
+                              {formatPrice(course.price)}
+                            </div>
+                            <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                              <div>
+                                <span className="font-semibold text-slate-700">
+                                  Bắt đầu:
+                                </span>{" "}
+                                {formatDateVn(course.start_at)}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-slate-700">
+                                  Kết thúc:
+                                </span>{" "}
+                                {formatDateVn(course.end_at)}
+                              </div>
                             </div>
 
                             {course.description && (

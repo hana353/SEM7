@@ -10,14 +10,19 @@ const STATUS_OPTIONS = [
   { value: "ARCHIVED", label: "Ẩn" },
 ];
 
-function toDatetimeLocalInput(v) {
+function toDateInput(v) {
   if (!v) return "";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function formatDateOnly(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("vi-VN");
 }
 
 function EditCourseModal({ course, teachers = [], onClose, onSuccess }) {
@@ -26,8 +31,8 @@ function EditCourseModal({ course, teachers = [], onClose, onSuccess }) {
   const [teacherId, setTeacherId] = useState(course?.teacher_id ?? "");
   const [price, setPrice] = useState(String(course?.price ?? 0));
   const [status, setStatus] = useState(course?.status ?? "DRAFT");
-  const [startAt, setStartAt] = useState(toDatetimeLocalInput(course?.start_at));
-  const [endAt, setEndAt] = useState(toDatetimeLocalInput(course?.end_at));
+  const [startAt, setStartAt] = useState(toDateInput(course?.start_at));
+  const [endAt, setEndAt] = useState(toDateInput(course?.end_at));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -174,7 +179,7 @@ function EditCourseModal({ course, teachers = [], onClose, onSuccess }) {
                 Bắt đầu
               </label>
               <input
-                type="datetime-local"
+                type="date"
                 value={startAt}
                 onChange={(e) => setStartAt(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -186,7 +191,7 @@ function EditCourseModal({ course, teachers = [], onClose, onSuccess }) {
                 Kết thúc
               </label>
               <input
-                type="datetime-local"
+                type="date"
                 value={endAt}
                 onChange={(e) => setEndAt(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -218,8 +223,59 @@ function EditCourseModal({ course, teachers = [], onClose, onSuccess }) {
   );
 }
 
+function ViewCourseModal({ course, onClose }) {
+  if (!course) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <h3 className="text-sm font-semibold text-slate-900">Chi tiết khóa học</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          >
+            Đóng
+          </button>
+        </div>
+
+        <div className="space-y-3 p-4 text-sm">
+          <div>
+            <p className="text-xs text-slate-500">Tên khóa học</p>
+            <p className="font-medium text-slate-900">{course.title || "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Mô tả</p>
+            <p className="whitespace-pre-line text-slate-700">{course.description || "Chưa có mô tả"}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs text-slate-500">Giáo viên</p>
+              <p className="font-medium text-slate-900">{course.teacher_name || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Giá</p>
+              <p className="font-medium text-slate-900">{Number(course.price || 0).toLocaleString("vi-VN")}đ</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Ngày bắt đầu</p>
+              <p className="font-medium text-slate-900">{formatDateOnly(course.start_at)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Ngày kết thúc</p>
+              <p className="font-medium text-slate-900">{formatDateOnly(course.end_at)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CoursesTable({ courses = [], teachers = [], onUpdated }) {
   const [editingCourse, setEditingCourse] = useState(null);
+  const [viewingCourse, setViewingCourse] = useState(null);
 
   return (
     <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
@@ -230,7 +286,8 @@ function CoursesTable({ courses = [], teachers = [], onUpdated }) {
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50">
-            <tr className="text-left text-xs font-medium text-slate-500">
+            <tr className="text-left text-xs font-semibold text-slate-700">
+              <th className="px-4 py-2 w-14">STT</th>
               <th className="px-4 py-2">Khóa học</th>
               <th className="px-4 py-2">Giáo viên</th>
               <th className="px-4 py-2">Giá</th>
@@ -241,8 +298,11 @@ function CoursesTable({ courses = [], teachers = [], onUpdated }) {
           </thead>
 
           <tbody className="divide-y divide-slate-100">
-            {courses.map((c) => (
+            {courses.map((c, index) => (
               <tr key={c.id} className="hover:bg-slate-50/70">
+                <td className="px-4 py-2 text-xs font-semibold text-slate-700">
+                  {index + 1}
+                </td>
                 <td className="px-4 py-2">
                   <div className="font-medium text-slate-900">{c.title}</div>
                   <div className="mt-0.5 line-clamp-2 text-xs text-slate-500">
@@ -273,18 +333,31 @@ function CoursesTable({ courses = [], teachers = [], onUpdated }) {
                 </td>
 
                 <td className="px-4 py-2 text-xs text-slate-500">
-                  <div>{c.start_at ? new Date(c.start_at).toLocaleString("vi-VN") : "—"}</div>
-                  <div>{c.end_at ? new Date(c.end_at).toLocaleString("vi-VN") : "—"}</div>
+                  <div>
+                    BD: <span className="font-semibold text-slate-700">{formatDateOnly(c.start_at)}</span>
+                  </div>
+                  <div>
+                    KT: <span className="font-semibold text-slate-700">{formatDateOnly(c.end_at)}</span>
+                  </div>
                 </td>
 
                 <td className="px-4 py-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingCourse(c)}
-                    className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
-                  >
-                    Chỉnh sửa
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setViewingCourse(c)}
+                      className="text-xs font-medium text-sky-600 hover:text-sky-700"
+                    >
+                      Xem chi tiết
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCourse(c)}
+                      className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
+                    >
+                      Chỉnh sửa
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -305,6 +378,13 @@ function CoursesTable({ courses = [], teachers = [], onUpdated }) {
             setEditingCourse(null);
             onUpdated?.();
           }}
+        />
+      )}
+
+      {viewingCourse && (
+        <ViewCourseModal
+          course={viewingCourse}
+          onClose={() => setViewingCourse(null)}
         />
       )}
     </div>

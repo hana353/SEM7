@@ -10,6 +10,11 @@ import VocabularySection from "./VocabularySection";
 import RevenuePage from "./RevenuePage";
 import LectureApprovalSection from "./LectureApprovalSection";
 
+const MONTH_NAMES = [
+  "T1", "T2", "T3", "T4", "T5", "T6",
+  "T7", "T8", "T9", "T10", "T11", "T12",
+];
+
 const sidebarItems = [
   { id: "dashboard", label: "Tổng quan" },
   { id: "users", label: "Người dùng" },
@@ -28,6 +33,7 @@ export default function AdminHomePage() {
   const [courses, setCourses] = useState([]);
   const [vocabTopics, setVocabTopics] = useState([]);
   const [stats, setStats] = useState({});
+  const [revenueByMonth, setRevenueByMonth] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingVocab, setLoadingVocab] = useState(true);
@@ -38,16 +44,111 @@ export default function AdminHomePage() {
     api.get("/courses").then(res => setCourses(Array.isArray(res.data) ? res.data : [])).catch(() => setCourses([])).finally(() => setLoadingCourses(false));
     api.get("/vocabulary/topics").then(res => setVocabTopics(res.data?.data || [])).catch(() => setVocabTopics([])).finally(() => setLoadingVocab(false));
     api.get("/stats/admin").then(res => setStats(res.data || {})).catch(() => setStats({})).finally(() => setLoadingStats(false));
+    api.get("/stats/admin/revenue").then(res => setRevenueByMonth(Array.isArray(res.data?.byMonth) ? res.data.byMonth : [])).catch(() => setRevenueByMonth([]));
   }, []);
 
   const renderContent = () => {
     if (activeSection === "dashboard") {
+      const monthlyRevenue = revenueByMonth
+        .slice()
+        .sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          return a.month - b.month;
+        })
+        .slice(-6);
+      const maxRevenue = Math.max(...monthlyRevenue.map((item) => Number(item.revenue || 0)), 0);
+      const chartWidth = 760;
+      const chartHeight = 240;
+      const chartPaddingX = 32;
+      const chartPaddingY = 20;
+      const usableWidth = chartWidth - chartPaddingX * 2;
+      const usableHeight = chartHeight - chartPaddingY * 2;
+      const stepX = monthlyRevenue.length > 1 ? usableWidth / (monthlyRevenue.length - 1) : 0;
+      const chartPoints = monthlyRevenue.map((item, index) => {
+        const revenue = Number(item.revenue || 0);
+        const x = chartPaddingX + (monthlyRevenue.length > 1 ? index * stepX : usableWidth / 2);
+        const y = chartPaddingY + (maxRevenue > 0 ? usableHeight - (revenue / maxRevenue) * usableHeight : usableHeight);
+        return {
+          x,
+          y,
+          revenue,
+          label: `${MONTH_NAMES[(item.month || 1) - 1]}/${item.year}`,
+        };
+      });
+      const linePath = chartPoints
+        .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+        .join(" ");
+      const areaPath = chartPoints.length
+        ? `${linePath} L ${chartPoints[chartPoints.length - 1].x} ${chartHeight - chartPaddingY} L ${chartPoints[0].x} ${chartHeight - chartPaddingY} Z`
+        : "";
+
       return (
         <div className="space-y-6">
           <SummaryCards users={users} courses={courses} stats={stats} />
-          <section className="rounded-xl bg-white shadow-sm border border-slate-200 p-4">
+          <section className="rounded-xl bg-linear-to-br from-rose-50 via-white to-sky-50 shadow-sm border border-rose-100 p-4">
+            <h2 className="text-sm font-semibold text-slate-900 mb-3">Biểu đồ đường doanh thu 6 tháng gần nhất</h2>
+
+            {monthlyRevenue.length === 0 ? (
+              <p className="text-sm text-slate-500">Chưa có dữ liệu doanh thu theo tháng.</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="overflow-x-auto">
+                  <div className="min-w-160">
+                    <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-60">
+                      <defs>
+                        <linearGradient id="revenueLine" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#ef4444" />
+                          <stop offset="100%" stopColor="#2563eb" />
+                        </linearGradient>
+                        <linearGradient id="revenueArea" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.28" />
+                          <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.04" />
+                        </linearGradient>
+                      </defs>
+
+                      {[0, 1, 2, 3].map((line) => {
+                        const y = chartPaddingY + (usableHeight / 3) * line;
+                        return (
+                          <line
+                            key={line}
+                            x1={chartPaddingX}
+                            y1={y}
+                            x2={chartWidth - chartPaddingX}
+                            y2={y}
+                            stroke="#e2e8f0"
+                            strokeDasharray="4 5"
+                          />
+                        );
+                      })}
+
+                      <path d={areaPath} fill="url(#revenueArea)" />
+                      <path d={linePath} fill="none" stroke="url(#revenueLine)" strokeWidth="3.5" strokeLinecap="round" />
+
+                      {chartPoints.map((point) => (
+                        <g key={point.label}>
+                          <circle cx={point.x} cy={point.y} r="5.5" fill="white" stroke="#f43f5e" strokeWidth="2.5" />
+                          <text x={point.x} y={point.y - 12} textAnchor="middle" className="fill-slate-600 text-[10px]">
+                            {point.revenue.toLocaleString("vi-VN")}đ
+                          </text>
+                          <text x={point.x} y={chartHeight - 6} textAnchor="middle" className="fill-slate-600 text-[10px]">
+                            {point.label}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">Đường biểu diễn tổng doanh thu giao dịch thành công theo từng tháng.</p>
+              </div>
+            )}
+          </section>
+          <section className="rounded-xl bg-linear-to-br from-emerald-50 to-white shadow-sm border border-emerald-100 p-4">
             <h2 className="text-sm font-semibold text-slate-900 mb-3">Phiên luyện từ vựng hôm nay</h2>
-            <p className="text-2xl font-semibold text-slate-900">{stats.todayPracticeSessions ?? 0}</p>
+            {loadingStats ? (
+              <p className="text-sm text-slate-500">Đang tải...</p>
+            ) : (
+              <p className="text-2xl font-semibold text-slate-900">{stats.todayPracticeSessions ?? 0}</p>
+            )}
             <p className="text-xs text-slate-500 mt-1">Tổng trên toàn hệ thống</p>
           </section>
         </div>

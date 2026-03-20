@@ -95,6 +95,15 @@ export default function Home({ onOpenAuthModal }) {
       maximumFractionDigits: 0
     }).format(value);
 
+  const formatDateVn = (value) => {
+    if (!value) return "Chưa cập nhật";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Chưa cập nhật";
+
+    return date.toLocaleDateString("vi-VN");
+  };
+
   const handleBuyNow = (courseId) => {
     if (!courseId) return;
 
@@ -186,41 +195,49 @@ export default function Home({ onOpenAuthModal }) {
                           <div>
                             <h3 className="text-sm font-semibold text-gray-900 sm:text-base">{course.title}</h3>
                             <p className="mt-1 text-xs text-gray-500">{course.short_description || course.subtitle || "Khóa học chất lượng, lộ trình rõ ràng."}</p>
+                            {course.teacher_name && (
+                              <p className="mt-1 text-xs font-medium text-indigo-700">Giảng viên: {course.teacher_name}</p>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="text-xs font-medium text-gray-500">{course.level || "All levels"}</div>
-                          <div className="mt-1 text-xs text-emerald-700 font-semibold">{Number(course.total_duration_minutes || 0)} phút</div>
                         </div>
                       </div>
 
-                      <div className="flex items-end justify-between rounded-xl bg-linear-to-r from-slate-50 to-white p-3 ring-1 ring-slate-100">
-                        <div>
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Học phí</div>
-                          <div className="text-base font-bold text-rose-600 sm:text-lg">
+                      <div className="space-y-1 text-xs leading-5 text-slate-600">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Thời gian khóa học</p>
+                        <p>
+                          <span className="text-slate-500">Bắt đầu:</span>{" "}
+                          <span className="font-bold text-slate-800">{formatDateVn(course.start_at)}</span>
+                        </p>
+                        <p>
+                          <span className="text-slate-500">Kết thúc:</span>{" "}
+                          <span className="font-bold text-slate-800">{formatDateVn(course.end_at)}</span>
+                        </p>
+                      </div>
+
+                      <div className="space-y-1 text-xs leading-5 text-slate-600">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Học phí</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-base font-bold text-rose-600 sm:text-lg">
                             {isFree ? "Miễn phí" : formatVnd(finalPrice)}
-                          </div>
-                          {hasDiscount && (
-                            <div className="text-xs text-gray-400 line-through">{formatVnd(originalPrice)}</div>
-                          )}
-                        </div>
-                        {hasDiscount && (
-                          <span className="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700">
-                            -{Math.round(((originalPrice - finalPrice) / originalPrice) * 100)}%
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-auto flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          </p>
                           <span className={`rounded-full px-2 py-1 text-[11px] font-medium ring-1 ${accent}`}>
                             {course.status || "PUBLISHED"}
                           </span>
-                          {course.teacher_name && <span>• {course.teacher_name}</span>}
                         </div>
+                        {hasDiscount && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-gray-400 line-through">{formatVnd(originalPrice)}</span>
+                            <span className="font-semibold text-rose-600">
+                              -{Math.round(((originalPrice - finalPrice) / originalPrice) * 100)}%
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-auto pt-1 flex items-center gap-2">
                         <Link
                           to="/courses"
                           className="inline-flex items-center justify-center rounded-lg border border-indigo-200 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"

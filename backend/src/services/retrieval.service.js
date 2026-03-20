@@ -100,6 +100,8 @@ async function getCourses() {
         description,
         price,
         status,
+        start_at,
+        end_at,
         total_duration_minutes,
         teacher_id,
         created_at
@@ -121,6 +123,8 @@ async function getCourses() {
     description: course.description || "",
     price: course.price || 0,
     status: course.status || "",
+    start_at: course.start_at || null,
+    end_at: course.end_at || null,
     total_duration_minutes: course.total_duration_minutes || 0,
     teacher_id: course.teacher_id || null,
     teacher_name: teacherMap.get(course.teacher_id) || "",
