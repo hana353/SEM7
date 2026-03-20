@@ -246,7 +246,7 @@ export default function Home({ onOpenAuthModal }) {
         </section>
 
         {/* Timeline Stepper Section vertical */}
-        <section className="relative space-y-4 overflow-hidden rounded-3xl bg-linear-to-br from-cyan-50/95 via-white to-indigo-50/90 p-6 shadow-lg ring-1 ring-cyan-100/70 backdrop-blur">
+        <section id="dich-vu" className="relative space-y-4 overflow-hidden rounded-3xl bg-linear-to-br from-cyan-50/95 via-white to-indigo-50/90 p-6 shadow-lg ring-1 ring-cyan-100/70 backdrop-blur">
           <div className="pointer-events-none absolute -right-12 -top-10 h-36 w-36 rounded-full bg-cyan-200/40 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-12 left-6 h-32 w-32 rounded-full bg-indigo-200/35 blur-2xl" />
           <div className="flex items-center justify-between">

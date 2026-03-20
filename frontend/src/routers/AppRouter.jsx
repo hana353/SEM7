@@ -79,21 +79,29 @@ function AppRoutes() {
     setAuthOpen(true);
   };
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = (loginData) => {
     setAuthOpen(false);
 
-    if (!isAuthenticated()) {
+    const roleCode = loginData?.user?.role_code || getRoleCode();
+    const pendingPurchase = readPendingPurchase();
+
+    if (pendingPurchase?.source === "chat" && roleCode === ROLE.STUDENT) {
+      clearPendingPurchase();
+      navigate("/", { replace: true });
       return true;
     }
-
-    const roleCode = getRoleCode();
-    const pendingPurchase = readPendingPurchase();
 
     if (pendingPurchase?.courseId && roleCode === ROLE.STUDENT) {
       clearPendingPurchase();
       navigate(`/courses?focusCourse=${encodeURIComponent(pendingPurchase.courseId)}`, {
         replace: true,
       });
+      return true;
+    }
+
+    if (roleCode === ROLE.STUDENT) {
+      clearPendingPurchase();
+      navigate("/", { replace: true });
       return true;
     }
 

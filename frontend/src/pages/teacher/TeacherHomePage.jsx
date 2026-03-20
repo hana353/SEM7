@@ -129,7 +129,7 @@ export default function TeacherHomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-100 via-slate-50 to-blue-50 flex">
+    <div className="min-h-screen bg-linear-to-br from-sky-100 via-blue-50 to-cyan-100 flex">
       {sidebarOpen && (
         <button
           type="button"

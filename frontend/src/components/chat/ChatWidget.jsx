@@ -96,7 +96,12 @@ export default function ChatWidget({ onRequireAuth }) {
           suggestedCourses: [],
         },
       ]);
-      onRequireAuth?.("login");
+      onRequireAuth?.("login", {
+        pendingPurchase: {
+          courseId,
+          source: "chat",
+        },
+      });
       return;
     }
 

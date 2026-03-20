@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [purchaseError, setPurchaseError] = useState("");
+  const [purchaseMessage, setPurchaseMessage] = useState("");
+  const [buyingCourseId, setBuyingCourseId] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -54,6 +59,45 @@ const Dashboard = () => {
       { name: "Chưa bắt đầu", value: notStarted, color: "#f3f4f6" }
     ].filter(item => item.value > 0);
   }, [completedCourses, inProgressCourses, enrolledCourses]);
+
+  const handleBuyCourse = async (course) => {
+    const courseId = course?.id;
+    if (!courseId || buyingCourseId) return;
+
+    setPurchaseError("");
+    setPurchaseMessage("");
+    setBuyingCourseId(courseId);
+
+    try {
+      const res = await api.post("/payments/create", {
+        course_id: courseId,
+      });
+
+      const paymentUrl = res.data?.data?.payment_url;
+      const enrolled = res.data?.data?.enrolled;
+
+      if (enrolled) {
+        setPurchaseMessage(res.data?.message || "Đăng ký khóa học thành công.");
+        navigate(`/student/course/${courseId}`);
+        return;
+      }
+
+      if (paymentUrl) {
+        window.location.href = paymentUrl;
+        return;
+      }
+
+      setPurchaseError(
+        res.data?.message || "Không tạo được link thanh toán. Vui lòng thử lại."
+      );
+    } catch (err) {
+      setPurchaseError(
+        err?.response?.data?.message || "Thanh toán thất bại. Vui lòng thử lại."
+      );
+    } finally {
+      setBuyingCourseId("");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -199,97 +243,6 @@ const Dashboard = () => {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl bg-linear-to-br from-blue-50/80 to-indigo-50/70 shadow-sm border border-blue-100 p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Tiến độ học tập
-            </h2>
-            <span className="text-[11px] bg-blue-100 text-blue-700 px-2 py-1 rounded">
-              {loading ? "…" : `${inProgressCourses.length} khóa`}
-            </span>
-          </div>
-          {loading ? (
-            <p className="text-sm text-slate-500">Đang tải dữ liệu tiến độ…</p>
-          ) : error ? (
-            <p className="text-sm text-red-500">{error}</p>
-          ) : inProgressCourses.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              Bạn chưa bắt đầu học khóa nào.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {inProgressCourses.slice(0, 5).map(c => (
-                <div key={c.id} className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-slate-900 line-clamp-1">
-                        {c.title}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {c.teacher_name || "Giáo viên đang cập nhật"}
-                      </p>
-                    </div>
-                    <p className="text-sm font-semibold text-slate-700 whitespace-nowrap">
-                      {Number(c.progress_percent || 0)}%
-                    </p>
-                  </div>
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-linear-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-300"
-                      style={{ width: `${Number(c.progress_percent || 0)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-xl bg-linear-to-br from-emerald-50/80 to-green-50/70 shadow-sm border border-emerald-100 p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Khóa học đã hoàn thành
-            </h2>
-            <span className="text-[11px] bg-green-100 text-green-700 px-2 py-1 rounded">
-              {loading ? "…" : `${completedCourses.length} khóa`}
-            </span>
-          </div>
-          {loading ? (
-            <p className="text-sm text-slate-500">Đang tải dữ liệu…</p>
-          ) : error ? (
-            <p className="text-sm text-red-500">{error}</p>
-          ) : completedCourses.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              Bạn chưa hoàn thành khóa học nào. Hãy bắt đầu học ngay!
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {completedCourses.slice(0, 5).map(c => (
-                <li
-                  key={c.id}
-                  className="flex items-start gap-3 p-2 rounded-lg bg-green-50 border border-green-200"
-                >
-                  <span className="shrink-0 text-green-600 mt-0.5">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-900 line-clamp-1">
-                      {c.title}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {c.teacher_name || "Giáo viên"}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl bg-linear-to-br from-amber-50/80 to-orange-50/70 shadow-sm border border-amber-100 p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-slate-900">
@@ -337,6 +290,16 @@ const Dashboard = () => {
               Dựa trên các khóa đang có trong hệ thống
             </p>
           </div>
+          {purchaseMessage && (
+            <p className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              {purchaseMessage}
+            </p>
+          )}
+          {purchaseError && (
+            <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {purchaseError}
+            </p>
+          )}
           {loading ? (
             <p className="text-sm text-slate-500">Đang tải gợi ý…</p>
           ) : error ? (
@@ -363,6 +326,14 @@ const Dashboard = () => {
                       GV: {c.teacher_name}
                     </p>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => handleBuyCourse(c)}
+                    disabled={Boolean(buyingCourseId)}
+                    className="mt-3 inline-flex items-center justify-center rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {buyingCourseId === c.id ? "Đang xử lý..." : "Mua ngay"}
+                  </button>
                 </div>
               ))}
             </div>

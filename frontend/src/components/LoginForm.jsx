@@ -47,6 +47,7 @@ export default function LoginForm({ onSuccess }) {
       if (data.user) {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
+      window.dispatchEvent(new Event("auth:changed"));
 
       const roleCode = data?.user?.role_code || null;
       const handledByParent = onSuccess?.(data);

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 export default function Footer({ onOpenAuthModal }) {
 	return (
-		<footer className="relative mt-10 border-t border-blue-800/80 bg-blue-950/95 text-blue-100 backdrop-blur">
+		<footer id="ve-chung-toi" className="relative mt-10 border-t border-blue-800/80 bg-blue-950/95 text-blue-100 backdrop-blur">
 			<div className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-10 md:grid-cols-4">
 				<div className="md:col-span-2">
 					<p className="text-base font-semibold text-white">English Center</p>

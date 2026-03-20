@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Dashboard from "./Dashboard";
 import MyCourses from "./MyCourses";
 import SuggestedCourses from "./SuggestedCourses";
@@ -18,9 +18,30 @@ const sidebarItems = [
 
 const StudentHomePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = getStoredUser();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedCourseId, setSelectedCourseId] = useState(null);
+
+  const tabFromQuery = useMemo(() => {
+    const queryTab = new URLSearchParams(location.search).get("tab");
+    return queryTab || "";
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!tabFromQuery) return;
+    const allowedTabs = new Set([
+      "dashboard",
+      "myCourses",
+      "suggestedCourses",
+      "vocabulary",
+      "profile",
+    ]);
+
+    if (allowedTabs.has(tabFromQuery)) {
+      setActiveTab(tabFromQuery);
+    }
+  }, [tabFromQuery]);
 
   const renderContent = () => {
     switch (activeTab) {
