@@ -74,18 +74,6 @@ const getSpeechRecognition = () => {
   return new SpeechRecognition();
 };
 
-const blobToBase64 = (blob) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = () => {
-      const res = String(reader.result || "");
-      const commaIdx = res.indexOf(",");
-      resolve(commaIdx >= 0 ? res.slice(commaIdx + 1) : res);
-    };
-    reader.readAsDataURL(blob);
-  });
-
 const speakText = (text, lang = "en-US") => {
   if (typeof window === "undefined") return;
   if (!("speechSynthesis" in window)) return;
@@ -93,6 +81,14 @@ const speakText = (text, lang = "en-US") => {
   u.lang = lang;
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
+};
+
+const normalizeWord = (text) => {
+  return String(text || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, "")
+    .replace(/\s+/g, " ");
 };
 
 const VocabularyPractice = () => {
@@ -106,7 +102,6 @@ const VocabularyPractice = () => {
   const [speechSupported] = useState(() => !!getSpeechRecognition());
   const [lastResult, setLastResult] = useState("");
   const [status, setStatus] = useState("");
-  const [useGemini, setUseGemini] = useState(true);
   const [echoResult, setEchoResult] = useState(false);
   const [remindWords, setRemindWords] = useState([]);
   const [loadingRemind, setLoadingRemind] = useState(false);
@@ -116,7 +111,7 @@ const VocabularyPractice = () => {
     setLoadingTopics(true);
     api
       .get("/vocabulary/topics")
-      .then(res => setTopics(res.data?.data || []))
+      .then((res) => setTopics(res.data?.data || []))
       .catch(() => setTopics([]))
       .finally(() => setLoadingTopics(false));
   }, []);
@@ -126,7 +121,7 @@ const VocabularyPractice = () => {
     setLoadingWords(true);
     api
       .get(`/vocabulary/topics/${selectedTopicId}/words`)
-      .then(res => {
+      .then((res) => {
         const data = res.data?.data || [];
         setWords(data);
         setCurrentIndex(0);
@@ -158,29 +153,31 @@ const VocabularyPractice = () => {
   };
 
   const gradeSpoken = async (transcript) => {
-    const t = String(transcript || "").trim();
-    setLastResult(t);
+    const rawTranscript = String(transcript || "").trim();
+    setLastResult(rawTranscript);
 
-    const spoken = t.toLowerCase();
-    const target = (currentWord?.word || "").trim().toLowerCase();
+    const spoken = normalizeWord(rawTranscript);
+    const target = normalizeWord(currentWord?.word || "");
     const passed = spoken === target;
+
     setStatus(
       passed
         ? "Chính xác! Bạn đã đọc đúng, chuyển sang từ tiếp theo."
-        : "Chưa chính xác, hãy thử lại."
+        : `Chưa chính xác. Bạn đọc: "${rawTranscript}"`
     );
 
-    if (echoResult && t) speakText(t, "en-US");
+    if (echoResult && rawTranscript) speakText(rawTranscript, "en-US");
 
     const accuracyPercent = passed ? 100 : 0;
+
     try {
       await api.post("/vocabulary/practice", {
         vocabularyId: currentWord.id,
-        spokenText: t,
+        spokenText: rawTranscript,
         accuracyPercent,
       });
     } catch {
-      // ignore logging error on client
+      // ignore
     }
 
     if (passed) {
@@ -192,19 +189,26 @@ const VocabularyPractice = () => {
             setShowCongrats(false);
             handleNext();
           }, 3000);
-        }, 2500);
+        }, 1500);
       } else {
         setTimeout(() => {
           handleNext();
-        }, 2500);
+        }, 1500);
       }
     }
   };
 
-  const startListeningBrowser = () => {
-    if (!speechSupported || !currentWord) return;
+  const startListening = () => {
+    if (!speechSupported || !currentWord) {
+      setStatus("Trình duyệt không hỗ trợ voice-to-text.");
+      return;
+    }
+
     const recognition = getSpeechRecognition();
-    if (!recognition) return;
+    if (!recognition) {
+      setStatus("Không khởi tạo được voice recognition.");
+      return;
+    }
 
     recognition.lang = "en-US";
     recognition.interimResults = false;
@@ -213,11 +217,12 @@ const VocabularyPractice = () => {
     recognition.onstart = () => {
       setIsListening(true);
       setStatus("Đang nghe... hãy đọc từ tiếng Anh hiển thị.");
+      setLastResult("");
     };
 
     recognition.onerror = (event) => {
       setIsListening(false);
-      setStatus(`Lỗi khi ghi âm: ${event.error}`);
+      setStatus(`Lỗi microphone/voice recognition: ${event.error}`);
     };
 
     recognition.onend = () => {
@@ -225,92 +230,18 @@ const VocabularyPractice = () => {
     };
 
     recognition.onresult = async (event) => {
-      const transcript = event.results[0][0].transcript.trim();
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim() || "";
       await gradeSpoken(transcript);
     };
 
     recognition.start();
   };
 
-  const startListeningGemini = async () => {
-    if (!currentWord) return;
-    if (!navigator?.mediaDevices?.getUserMedia) {
-      setStatus("Thiết bị/trình duyệt không hỗ trợ thu âm (getUserMedia).");
-      return;
-    }
-
-    setIsListening(true);
-    setStatus("Đang thu âm (Gemini)...");
-    setLastResult("");
-
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const options = {};
-      const recorder = new MediaRecorder(stream, options);
-      const chunks = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-
-      const stopped = new Promise((resolve) => {
-        recorder.onstop = resolve;
-      });
-
-      recorder.start();
-      setStatus("Đang thu âm (Gemini)... hãy đọc từ tiếng Anh hiển thị.");
-
-      setTimeout(() => {
-        if (recorder.state !== "inactive") recorder.stop();
-      }, 2500);
-
-      await stopped;
-
-      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-      const audioBase64 = await blobToBase64(blob);
-
-      setStatus("Đang gửi audio lên AI (Gemini) để chuyển thành text...");
-      const res = await api.post("/speech/transcribe", {
-        audioBase64,
-        mimeType: blob.type,
-        language: "en",
-      });
-      const transcript = res.data?.data?.text || "";
-      await gradeSpoken(transcript);
-    } catch (e) {
-      const retryAfter = e?.response?.data?.retryAfterSeconds;
-      const msg =
-        e?.response?.data?.message ||
-        e?.message ||
-        "unknown";
-      if (retryAfter) {
-        setStatus(
-          `Gemini đang bị giới hạn quota/rate-limit. Vui lòng thử lại sau ~${retryAfter}s, hoặc tắt "Dùng Gemini AI (backend)" để dùng voice-to-text của trình duyệt.`
-        );
-      } else {
-        setStatus(`Lỗi khi dùng Gemini voice-to-text: ${msg}`);
-      }
-    } finally {
-      setIsListening(false);
-      try {
-        stream?.getTracks?.().forEach((t) => t.stop());
-      } catch {
-        // ignore
-      }
-    }
-  };
-
-  const startListening = () => {
-    if (useGemini) return startListeningGemini();
-    return startListeningBrowser();
-  };
-
   const fetchRemindWords = () => {
     setLoadingRemind(true);
     api
       .get("/vocabulary/remind?limit=20")
-      .then(res => setRemindWords(res.data?.data || []))
+      .then((res) => setRemindWords(res.data?.data || []))
       .catch(() => setRemindWords([]))
       .finally(() => setLoadingRemind(false));
   };
@@ -323,10 +254,10 @@ const VocabularyPractice = () => {
           <div className="bg-white rounded-2xl shadow-2xl px-8 py-10 text-center">
             <p className="text-4xl font-bold text-green-600 mb-2">🎉 Chúc mừng!</p>
             <p className="text-lg text-gray-700">Bạn đã hoàn thành luyện từ vựng chủ đề này.</p>
-            <p className="text-sm text-gray-500 mt-2">Hiệu ứng pháo sẽ kết thúc sau 3 giây...</p>
           </div>
         </div>
       )}
+
       <h1 className="text-3xl font-bold mb-4">Luyện từ vựng (Free)</h1>
       <p className="text-gray-600 mb-6">
         Sau khi đăng ký, bạn có thể học các bộ từ vựng miễn phí do admin tạo,
@@ -338,6 +269,7 @@ const VocabularyPractice = () => {
           <h2 className="text-sm font-semibold text-gray-800 mb-3">
             Chọn chủ đề từ vựng
           </h2>
+
           {loadingTopics ? (
             <p className="text-sm text-gray-500">Đang tải chủ đề...</p>
           ) : topics.length === 0 ? (
@@ -381,6 +313,7 @@ const VocabularyPractice = () => {
             >
               Lấy danh sách cần ôn
             </button>
+
             <div className="mt-2 max-h-40 overflow-y-auto text-xs text-gray-700 space-y-1">
               {loadingRemind ? (
                 <p className="text-gray-500">Đang tải...</p>
@@ -414,8 +347,7 @@ const VocabularyPractice = () => {
               </p>
             ) : words.length === 0 ? (
               <p className="text-sm text-gray-500">
-                Chủ đề này chưa có từ vựng. Vui lòng chọn chủ đề khác hoặc chờ
-                admin thêm từ.
+                Chủ đề này chưa có từ vựng. Vui lòng chọn chủ đề khác hoặc chờ admin thêm từ.
               </p>
             ) : currentWord ? (
               <>
@@ -430,6 +362,7 @@ const VocabularyPractice = () => {
                     />
                   </div>
                 </div>
+
                 <div>
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">
                     {currentWord.word}
@@ -464,8 +397,7 @@ const VocabularyPractice = () => {
                     </button>
                   </div>
                   <div className="text-right text-xs text-gray-500">
-                    Hãy đọc to từ tiếng Anh, hệ thống sẽ so sánh giọng nói với
-                    từ hiển thị.
+                    Hãy đọc to
                   </div>
                 </div>
               </>
@@ -475,14 +407,19 @@ const VocabularyPractice = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-700">
-                Luyện phát âm (voice-to-text)
+                Luyện phát âm 
               </p>
-              {speechSupported && (
+
+              {!speechSupported ? (
+                <p className="text-xs text-red-500 mt-1">
+                  Trình duyệt này không hỗ trợ SpeechRecognition. Nên dùng Chrome.
+                </p>
+              ) : (
                 <>
                   <p className="text-xs text-gray-500 mt-1">
-                    Nhấn nút &quot;Bắt đầu đọc&quot;, cho phép quyền microphone
-                    và đọc to từ vựng.
+                    Nhấn "Bắt đầu đọc", cho phép quyền microphone và đọc đúng từ tiếng Anh đang hiển thị.
                   </p>
+
                   {lastResult && (
                     <p className="text-xs text-gray-600 mt-1">
                       Bạn đã đọc:{" "}
@@ -491,12 +428,13 @@ const VocabularyPractice = () => {
                       </span>
                     </p>
                   )}
+
                   {status && (
                     <p
                       className={`text-sm mt-2 font-semibold px-3 py-2 rounded-lg ${
                         status.startsWith("Chính xác")
                           ? "bg-green-500 text-white"
-                          : "text-gray-700"
+                          : "text-gray-700 bg-gray-100"
                       }`}
                     >
                       {status}
@@ -508,21 +446,21 @@ const VocabularyPractice = () => {
 
             <button
               type="button"
-              disabled={!currentWord || isListening}
+              disabled={!currentWord || isListening || !speechSupported}
               onClick={startListening}
               className={`px-4 py-2 rounded-lg text-xs font-semibold shadow-sm ${
-                !currentWord
+                !currentWord || !speechSupported
                   ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                   : isListening
-                    ? "bg-red-500 text-white"
-                    : "bg-blue-600 text-white hover:bg-blue-500"
+                  ? "bg-red-500 text-white"
+                  : "bg-blue-600 text-white hover:bg-blue-500"
               }`}
             >
               {!currentWord
                 ? "Chọn chủ đề & từ"
                 : isListening
-                  ? "Đang xử lý..."
-                  : "Bắt đầu đọc"}
+                ? "Đang nghe..."
+                : "Bắt đầu đọc"}
             </button>
           </div>
         </section>
