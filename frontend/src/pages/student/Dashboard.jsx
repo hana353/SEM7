@@ -3,6 +3,19 @@ import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from "recharts";
 
+const FLASHCARD_ACTIVITY_KEY = "flashcardLearnedSetIds";
+
+function getLearnedFlashcardSetIds() {
+  try {
+    const raw = localStorage.getItem(FLASHCARD_ACTIVITY_KEY);
+    const parsed = JSON.parse(raw || "[]");
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.map((id) => String(id)));
+  } catch {
+    return new Set();
+  }
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
@@ -12,6 +25,7 @@ const Dashboard = () => {
   const [purchaseError, setPurchaseError] = useState("");
   const [purchaseMessage, setPurchaseMessage] = useState("");
   const [buyingCourseId, setBuyingCourseId] = useState("");
+  const [activityCourseIds, setActivityCourseIds] = useState([]);
 
   useEffect(() => {
     Promise.all([
@@ -38,27 +52,106 @@ const Dashboard = () => {
     () => courses.filter(c => Number(c.price || 0) > 0),
     [courses]
   );
-  const completedCourses = useMemo(
-    () => enrolledCourses.filter(c => Number(c.progress_percent || 0) === 100),
-    [enrolledCourses]
-  );
-  const inProgressCourses = useMemo(
-    () => enrolledCourses.filter(c => Number(c.progress_percent || 0) > 0 && Number(c.progress_percent || 0) < 100),
-    [enrolledCourses]
-  );
   const highlightCourses = courses.slice(0, 6);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const collectLearningActivity = async () => {
+      if (enrolledCourses.length === 0) {
+        setActivityCourseIds([]);
+        return;
+      }
+
+      try {
+        const results = await Promise.all(
+          enrolledCourses.map(async (course) => {
+            const [testsRes, flashcardsRes] = await Promise.all([
+              api
+                .get(`/tests?course_id=${encodeURIComponent(course.id)}`)
+                .catch(() => ({ data: { data: [] } })),
+              api
+                .get(`/flashcards?course_id=${encodeURIComponent(course.id)}`)
+                .catch(() => ({ data: { data: [] } })),
+            ]);
+
+            const tests = Array.isArray(testsRes.data?.data) ? testsRes.data.data : [];
+            const flashcards = Array.isArray(flashcardsRes.data?.data)
+              ? flashcardsRes.data.data
+              : [];
+            const learnedSetIds = getLearnedFlashcardSetIds();
+
+            const attemptsByTest = await Promise.all(
+              tests.map((test) =>
+                api
+                  .get(`/tests/${test.id}/attempts/me`)
+                  .then((res) => (Array.isArray(res.data?.data) ? res.data.data : []))
+                  .catch(() => [])
+              )
+            );
+
+            const hasTestActivity = attemptsByTest.some((attempts) => attempts.length > 0);
+            const hasFlashcardActivity = flashcards.some((setItem) =>
+              learnedSetIds.has(String(setItem.id))
+            );
+            const hasActivity = hasTestActivity || hasFlashcardActivity;
+            return hasActivity ? String(course.id) : null;
+          })
+        );
+
+        if (!cancelled) {
+          setActivityCourseIds(results.filter(Boolean));
+        }
+      } catch {
+        if (!cancelled) {
+          setActivityCourseIds([]);
+        }
+      }
+    };
+
+    collectLearningActivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enrolledCourses]);
+
+  const progressSummary = useMemo(() => {
+    const activitySet = new Set(activityCourseIds);
+
+    return enrolledCourses.reduce(
+      (acc, course) => {
+        const progress = Number(course.progress_percent || 0);
+        const hasExternalActivity = activitySet.has(String(course.id));
+
+        if (progress >= 100) {
+          acc.completed += 1;
+          return acc;
+        }
+
+        if (progress > 0 || hasExternalActivity) {
+          acc.inProgress += 1;
+          return acc;
+        }
+
+        acc.notStarted += 1;
+        return acc;
+      },
+      { completed: 0, inProgress: 0, notStarted: 0 }
+    );
+  }, [activityCourseIds, enrolledCourses]);
+
   const progressData = useMemo(() => {
-    const completed = completedCourses.length;
-    const inProgress = inProgressCourses.length;
-    const notStarted = enrolledCourses.length - completed - inProgress;
+    const completed = progressSummary.completed;
+    const inProgress = progressSummary.inProgress;
+    const notStarted = progressSummary.notStarted;
     
     return [
-      { name: "Hoàn thành", value: completed, color: "#10b981" },
+      { name: "Đã hoàn thành", value: completed, color: "#10b981" },
       { name: "Đang học", value: inProgress, color: "#3b82f6" },
-      { name: "Chưa bắt đầu", value: notStarted, color: "#f3f4f6" }
-    ].filter(item => item.value > 0);
-  }, [completedCourses, inProgressCourses, enrolledCourses]);
+      { name: "Chưa học", value: notStarted, color: "#fde68a" }
+    ];
+  }, [progressSummary]);
 
   const handleBuyCourse = async (course) => {
     const courseId = course?.id;
@@ -140,7 +233,7 @@ const Dashboard = () => {
             Khóa học đã hoàn thành
           </p>
           <p className="mt-2 text-2xl font-semibold text-blue-700">
-            {loading ? "…" : completedCourses.length}
+            {loading ? "…" : progressSummary.completed}
           </p>
           <p className="mt-1 text-xs text-blue-900/70">
             Bạn đã hoàn thành học tập khoá này
@@ -207,11 +300,11 @@ const Dashboard = () => {
               <div className="rounded-lg bg-linear-to-br from-emerald-50 to-emerald-100 border border-emerald-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-emerald-900">Hoàn thành</p>
+                    <p className="text-sm font-medium text-emerald-900">Đã hoàn thành</p>
                     <p className="text-xs text-emerald-700 mt-1">Khóa học đã hoàn tất</p>
                   </div>
                   <p className="text-3xl font-bold text-emerald-600">
-                    {completedCourses.length}
+                    {progressSummary.completed}
                   </p>
                 </div>
               </div>
@@ -222,18 +315,18 @@ const Dashboard = () => {
                     <p className="text-xs text-blue-700 mt-1">Khóa học đang thực hiện</p>
                   </div>
                   <p className="text-3xl font-bold text-blue-600">
-                    {inProgressCourses.length}
+                    {progressSummary.inProgress}
                   </p>
                 </div>
               </div>
-              <div className="rounded-lg bg-linear-to-br from-slate-50 to-slate-100 border border-slate-200 p-4">
+              <div className="rounded-lg bg-linear-to-br from-amber-50 to-rose-50 border border-amber-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-900">Chưa bắt đầu</p>
-                    <p className="text-xs text-slate-700 mt-1">Khóa học chưa được bắt đầu</p>
+                    <p className="text-sm font-medium text-amber-900">Chưa học</p>
+                    <p className="text-xs text-amber-700 mt-1">Khóa học chưa được bắt đầu</p>
                   </div>
-                  <p className="text-3xl font-bold text-slate-600">
-                    {enrolledCourses.length - completedCourses.length - inProgressCourses.length}
+                  <p className="text-3xl font-bold text-amber-600">
+                    {progressSummary.notStarted}
                   </p>
                 </div>
               </div>

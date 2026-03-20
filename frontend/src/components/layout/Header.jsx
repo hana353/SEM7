@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getStoredUser, hasValidSession } from "../../auth/session";
+import { clearSession, getStoredUser, hasValidSession } from "../../auth/session";
 
 export default function Header({ onOpenAuthModal }) {
 	const navigate = useNavigate();
@@ -84,6 +84,14 @@ export default function Header({ onOpenAuthModal }) {
 		navigate("/studenthomepage?tab=dashboard");
 	};
 
+	const handleLogout = () => {
+		clearSession();
+		setCurrentUser(null);
+		setShowUserMenu(false);
+		window.dispatchEvent(new Event("auth:changed"));
+		navigate("/", { replace: true });
+	};
+
 	return (
 		<header className="relative mx-auto mt-4 flex w-full max-w-6xl items-center justify-between rounded-2xl border border-blue-800/80 bg-blue-900/90 px-6 py-4 shadow-lg shadow-blue-900/30">
 			<Link to="/" className="text-lg font-bold tracking-tight text-white sm:text-xl">
@@ -150,6 +158,14 @@ export default function Header({ onOpenAuthModal }) {
 								className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
 							>
 								Hồ sơ cá nhân
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								onClick={handleLogout}
+								className="block w-full px-4 py-2 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+							>
+								Đăng xuất
 							</button>
 						</div>
 					)}

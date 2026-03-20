@@ -2,6 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 
+const FLASHCARD_ACTIVITY_KEY = "flashcardLearnedSetIds";
+
+function markFlashcardActivity(setId) {
+  if (!setId) return;
+
+  try {
+    const raw = localStorage.getItem(FLASHCARD_ACTIVITY_KEY);
+    const parsed = JSON.parse(raw || "[]");
+    const current = Array.isArray(parsed) ? parsed : [];
+    const normalized = String(setId);
+    if (!current.includes(normalized)) {
+      localStorage.setItem(FLASHCARD_ACTIVITY_KEY, JSON.stringify([...current, normalized]));
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
 export default function StudentFlashcardPage() {
   const { setId } = useParams();
   const navigate = useNavigate();
@@ -24,6 +42,7 @@ export default function StudentFlashcardPage() {
   const current = cards[currentIndex];
 
   const next = () => {
+    markFlashcardActivity(setId);
     setShowBack(false);
     if (currentIndex + 1 >= cards.length) return navigate(-1);
     setCurrentIndex((i) => i + 1);
@@ -61,7 +80,10 @@ export default function StudentFlashcardPage() {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setShowBack((v) => !v)}
+            onClick={() => {
+              markFlashcardActivity(setId);
+              setShowBack((v) => !v);
+            }}
             className="flex-1 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-800 hover:bg-slate-50"
           >
             {showBack ? "Xem mặt trước" : "Lật thẻ"}
