@@ -2,10 +2,9 @@ import axios from "axios";
 import { getToken } from "../auth/session";
 
 const api = axios.create({
-  baseURL: "http://localhost:3000/api"
+  baseURL: import.meta.env.VITE_API_URL
 });
 
-// Interceptor: thêm token vào mỗi request
 api.interceptors.request.use(
   (config) => {
     const token = getToken();
@@ -14,9 +13,7 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 export default api;
