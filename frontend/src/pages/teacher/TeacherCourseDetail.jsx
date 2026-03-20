@@ -8,6 +8,28 @@ const tabs = [
   { id: "tests", label: "Bài test" },
 ];
 
+const APPROVED_STATUSES = new Set(["APPROVED_PUBLIC", "PUBLISHED", "ON_SALE"]);
+
+function getTeacherStatusLabel(status) {
+  if (status === "PENDING_APPROVAL") return "Chờ duyệt";
+  if (status === "DRAFT") return "Nháp";
+  if (APPROVED_STATUSES.has(status)) return "Đã duyệt";
+  return status || "—";
+}
+
+function getTeacherStatusClass(status) {
+  if (status === "PENDING_APPROVAL") {
+    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+  }
+  if (status === "DRAFT") {
+    return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+  }
+  if (APPROVED_STATUSES.has(status)) {
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+  }
+  return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+}
+
 /* ========== MODAL CHỈNH SỬA BÀI GIẢNG ========== */
 function EditLectureModal({ lecture, onClose, onSuccess }) {
   const [title, setTitle] = useState(lecture?.title ?? "");
@@ -993,7 +1015,7 @@ export default function TeacherCourseDetail({ courseId: courseIdProp, embedded =
   if (!course) return null;
 
   return (
-    <div className={embedded ? "" : "min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100"}>
+    <div className={embedded ? "" : "min-h-screen bg-linear-to-br from-slate-50 via-white to-slate-100"}>
       {!embedded && (
         <header className="bg-white/80 backdrop-blur border-b px-6 py-4">
           <button
@@ -1056,40 +1078,58 @@ export default function TeacherCourseDetail({ courseId: courseIdProp, embedded =
             {lectures.length === 0 ? (
               <p className="text-slate-500">Chưa có bài giảng. Nhấn &quot;Thêm bài giảng&quot; để tạo mới (mỗi bài gồm 1 video + thông tin).</p>
             ) : (
-              <ul className="space-y-2">
-                {lectures.map((l, i) => (
-                  <li key={l.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                    <div>
-                      <span className="font-medium">{i + 1}. {l.title}</span>
-                      {l.video_url && <span className="ml-2 text-xs text-slate-500">(có video)</span>}
-                      {l.status && (
-                        <span className="ml-2 text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                          {l.status}
-                        </span>
-                      )}
-                      {l.status === "REJECTED" && l.rejection_reason && (
-                        <p className="text-xs text-red-600 mt-1">Lý do từ chối: {l.rejection_reason}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-slate-500">{l.duration_minutes || 0} phút</span>
-                      {(l.status === "DRAFT" || l.status === "REJECTED") && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            await api.patch(`/lectures/${l.id}`, { status: "PENDING_APPROVAL" });
-                            refresh();
-                          }}
-                          className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500"
-                        >
-                          Gửi duyệt
-                        </button>
-                      )}
-                      <button type="button" onClick={() => setEditingLecture(l)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">Chỉnh sửa</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left text-xs font-medium text-slate-500">
+                      <th className="px-3 py-2 w-16">STT</th>
+                      <th className="px-3 py-2">Tên</th>
+                      <th className="px-3 py-2 w-36">Trạng thái</th>
+                      <th className="px-3 py-2 w-72">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {lectures.map((l, i) => (
+                      <tr key={l.id} className="hover:bg-slate-50/70 align-top">
+                        <td className="px-3 py-3 font-medium text-slate-700">{i + 1}</td>
+                        <td className="px-3 py-3">
+                          <p className="font-medium text-slate-900">{l.title}</p>
+                          <p className="text-xs text-slate-500">
+                            {l.video_url ? "Có video" : "Chưa có video"} • {l.duration_minutes || 0} phút
+                          </p>
+                          {l.status === "REJECTED" && l.rejection_reason && (
+                            <p className="text-xs text-red-600 mt-1">Lý do từ chối: {l.rejection_reason}</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium ${getTeacherStatusClass(l.status)}`}
+                          >
+                            {getTeacherStatusLabel(l.status)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {(l.status === "DRAFT" || l.status === "REJECTED") && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await api.patch(`/lectures/${l.id}`, { status: "PENDING_APPROVAL" });
+                                  refresh();
+                                }}
+                                className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500"
+                              >
+                                Gửi duyệt
+                              </button>
+                            )}
+                            <button type="button" onClick={() => setEditingLecture(l)} className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">Chỉnh sửa</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
@@ -1109,17 +1149,38 @@ export default function TeacherCourseDetail({ courseId: courseIdProp, embedded =
             {flashcards.length === 0 ? (
               <p className="text-slate-500">Chưa có flashcard. Nhấn &quot;Tạo flashcard&quot; để thêm thẻ học.</p>
             ) : (
-              <ul className="space-y-2">
-                {flashcards.map((s) => (
-                  <li key={s.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                    <span>{s.title}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{s.status || "DRAFT"}</span>
-                      <button type="button" onClick={() => setFlashcardDetailModal(s.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem thẻ</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left text-xs font-medium text-slate-500">
+                      <th className="px-3 py-2 w-16">STT</th>
+                      <th className="px-3 py-2">Tên</th>
+                      <th className="px-3 py-2 w-36">Trạng thái</th>
+                      <th className="px-3 py-2 w-56">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {flashcards.map((s, i) => (
+                      <tr key={s.id} className="hover:bg-slate-50/70">
+                        <td className="px-3 py-3 font-medium text-slate-700">{i + 1}</td>
+                        <td className="px-3 py-3 font-medium text-slate-900">{s.title}</td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${getTeacherStatusClass(
+                              s.status || "DRAFT"
+                            )}`}
+                          >
+                            {getTeacherStatusLabel(s.status || "DRAFT")}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <button type="button" onClick={() => setFlashcardDetailModal(s.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem thẻ</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
@@ -1139,19 +1200,42 @@ export default function TeacherCourseDetail({ courseId: courseIdProp, embedded =
             {tests.length === 0 ? (
               <p className="text-slate-500">Chưa có bài test. Nhấn &quot;Tạo bài test&quot; để thêm câu hỏi trắc nghiệm.</p>
             ) : (
-              <ul className="space-y-2">
-                {tests.map((t) => (
-                  <li key={t.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                    <span>{t.title}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100">{t.status || "DRAFT"}</span>
-                      <button type="button" onClick={() => setTestDetailModal(t.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem câu hỏi</button>
-                      <button type="button" onClick={() => setEditTestModal(t.id)} className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-100">Sửa</button>
-                      <button type="button" onClick={() => setTestAttemptsModal(t.id)} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500">Lịch sử làm bài</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left text-xs font-medium text-slate-500">
+                      <th className="px-3 py-2 w-16">STT</th>
+                      <th className="px-3 py-2">Tên</th>
+                      <th className="px-3 py-2 w-36">Trạng thái</th>
+                      <th className="px-3 py-2 w-80">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {tests.map((t, i) => (
+                      <tr key={t.id} className="hover:bg-slate-50/70">
+                        <td className="px-3 py-3 font-medium text-slate-700">{i + 1}</td>
+                        <td className="px-3 py-3 font-medium text-slate-900">{t.title}</td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${getTeacherStatusClass(
+                              t.status || "DRAFT"
+                            )}`}
+                          >
+                            {getTeacherStatusLabel(t.status || "DRAFT")}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button type="button" onClick={() => setTestDetailModal(t.id)} className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800">Xem câu hỏi</button>
+                            <button type="button" onClick={() => setEditTestModal(t.id)} className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-700 hover:bg-slate-100">Sửa</button>
+                            <button type="button" onClick={() => setTestAttemptsModal(t.id)} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-500">Lịch sử làm bài</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

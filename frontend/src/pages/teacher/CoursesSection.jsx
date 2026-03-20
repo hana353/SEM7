@@ -1,9 +1,6 @@
 import React from "react";
 
 function CoursesSection({ courses = [], loading, onCourseClick }) {
-  const statusLabel = (s) =>
-    ({ PUBLISHED: "Đang bán", DRAFT: "Chờ duyệt", ARCHIVED: "Ẩn" }[s] || s || "—");
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -22,7 +19,6 @@ function CoursesSection({ courses = [], loading, onCourseClick }) {
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium text-slate-500">
                   <th className="px-4 py-2">Tên khóa học</th>
-                  <th className="px-4 py-2">Trạng thái</th>
                   <th className="px-4 py-2">Giá</th>
                   <th className="px-4 py-2">Thao tác</th>
                 </tr>
@@ -31,7 +27,7 @@ function CoursesSection({ courses = [], loading, onCourseClick }) {
                 {courses.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={3}
                       className="px-4 py-6 text-center text-slate-500"
                     >
                       Chưa có khóa học nào được gán
@@ -42,17 +38,6 @@ function CoursesSection({ courses = [], loading, onCourseClick }) {
                     <tr key={course.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-2 text-slate-900">
                         {course.title}
-                      </td>
-                      <td className="px-4 py-2">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                            course.status === "PUBLISHED"
-                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
-                              : "bg-sky-50 text-sky-700 ring-1 ring-sky-100"
-                          }`}
-                        >
-                          {statusLabel(course.status)}
-                        </span>
                       </td>
                       <td className="px-4 py-2 text-slate-600">
                         {Number(course.price || 0).toLocaleString("vi-VN")}đ

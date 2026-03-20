@@ -88,7 +88,7 @@ function CreateCourseForm({ users = [], onCreated }) {
         <div>
           <label className="block text-xs text-slate-500 mb-1">Bắt đầu</label>
           <input
-            type="datetime-local"
+            type="date"
             value={startAt}
             onChange={(e) => setStartAt(e.target.value)}
             className="w-full px-3 py-2 border rounded text-sm"
@@ -97,7 +97,7 @@ function CreateCourseForm({ users = [], onCreated }) {
         <div>
           <label className="block text-xs text-slate-500 mb-1">Kết thúc</label>
           <input
-            type="datetime-local"
+            type="date"
             value={endAt}
             onChange={(e) => setEndAt(e.target.value)}
             className="w-full px-3 py-2 border rounded text-sm"

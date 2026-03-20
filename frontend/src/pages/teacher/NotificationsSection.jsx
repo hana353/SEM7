@@ -8,6 +8,37 @@ const TYPE_OPTIONS = [
   { value: "LECTURE_REJECTED", label: "Bài giảng bị từ chối" },
 ];
 
+const TYPE_META = {
+  ENROLLMENT_NEW: {
+    label: "Học viên mới",
+    className: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
+  },
+  LECTURE_APPROVED: {
+    label: "Đã duyệt",
+    className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  },
+  LECTURE_REJECTED: {
+    label: "Từ chối",
+    className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  },
+};
+
+function getTypeMeta(type) {
+  if (!type) {
+    return {
+      label: "Khác",
+      className: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
+    };
+  }
+
+  return (
+    TYPE_META[type] || {
+      label: type,
+      className: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
+    }
+  );
+}
+
 export default function NotificationsSection() {
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
@@ -105,7 +136,10 @@ export default function NotificationsSection() {
           <div className="p-6 text-center text-slate-500 text-sm">Chưa có thông báo</div>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {items.map((n) => (
+            {items.map((n) => {
+              const typeMeta = getTypeMeta(n.type);
+
+              return (
               <li key={n.id} className="p-4 hover:bg-slate-50/60">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -116,8 +150,10 @@ export default function NotificationsSection() {
                       <p className="mt-1 text-sm text-slate-700">{n.body}</p>
                     )}
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                      <span className="rounded bg-slate-100 px-2 py-0.5">
-                        {n.type}
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${typeMeta.className}`}
+                      >
+                        {typeMeta.label}
                       </span>
                       <span>
                         {n.created_at ? new Date(n.created_at).toLocaleString("vi-VN") : ""}
@@ -126,7 +162,8 @@ export default function NotificationsSection() {
                   </div>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
