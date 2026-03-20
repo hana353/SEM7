@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import api from "../../api/axios";
 
 function formatCountdown(totalSeconds) {
@@ -14,6 +14,8 @@ function formatCountdown(totalSeconds) {
 export default function StudentTestAttemptPage() {
   const { attemptId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,6 +41,23 @@ export default function StudentTestAttemptPage() {
     });
     setAnswers((a) => ({ ...initial, ...a }));
   }, [data]);
+
+  const goBackToTestsTab = () => {
+    const courseId =
+      location.state?.courseId ||
+      data?.test?.course_id ||
+      data?.attempt?.course_id ||
+      null;
+
+    navigate("/studenthomepage", {
+      replace: true,
+      state: {
+        section: "myCourses",
+        selectedCourseId: courseId,
+        activeTab: "tests",
+      },
+    });
+  };
 
   useEffect(() => {
     if (!data?.attempt) return;
@@ -74,10 +93,19 @@ export default function StudentTestAttemptPage() {
         autoSubmittedRef.current = true;
         api
           .post(`/tests/attempts/${attemptId}/submit`)
-          .then(() => navigate(`/student/attempt/${attemptId}/review`))
+          .then(() => {
+            navigate(`/student/attempt/${attemptId}/review`, {
+              replace: true,
+              state: {
+                courseId:
+                  location.state?.courseId ||
+                  data?.test?.course_id ||
+                  data?.attempt?.course_id ||
+                  null,
+              },
+            });
+          })
           .catch(() => {
-            // Backend cũng sẽ auto-submit khi quá hạn,
-            // nên nếu request fail thì chỉ cần refresh trang.
             window.location.reload();
           });
       }
@@ -86,17 +114,42 @@ export default function StudentTestAttemptPage() {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [data?.attempt?.expires_at, data?.attempt?.time_limit_seconds, data?.attempt?.started_at, data?.attempt?.status, attemptId, navigate]);
+  }, [
+    data,
+    data?.attempt?.expires_at,
+    data?.attempt?.time_limit_seconds,
+    data?.attempt?.started_at,
+    data?.attempt?.status,
+    attemptId,
+    navigate,
+    location.state,
+  ]);
 
-  if (loading) return <div className="p-6 text-center text-slate-500">Đang tải...</div>;
-  if (error || !data) return <div className="p-6 text-center text-red-500">{error || "Không tìm thấy bài làm"}</div>;
+  if (loading) {
+    return <div className="p-6 text-center text-slate-500">Đang tải...</div>;
+  }
+
+  if (error || !data) {
+    return (
+      <div className="p-6 text-center text-red-500">
+        {error || "Không tìm thấy bài làm"}
+      </div>
+    );
+  }
 
   const { attempt, test, questions } = data;
+
   if (attempt.status !== "IN_PROGRESS") {
     return (
       <div className="p-6 text-center">
         <p className="text-slate-600">Bài làm này đã nộp hoặc đã chấm.</p>
-        <button type="button" onClick={() => navigate(-1)} className="mt-2 text-blue-600 hover:underline">Quay lại</button>
+        <button
+          type="button"
+          onClick={goBackToTestsTab}
+          className="mt-2 text-blue-600 hover:underline"
+        >
+          Quay lại
+        </button>
       </div>
     );
   }
@@ -106,14 +159,28 @@ export default function StudentTestAttemptPage() {
 
   const handleSaveAnswer = (questionId, choiceId) => {
     setAnswers((a) => ({ ...a, [questionId]: choiceId }));
-    api.post(`/tests/attempts/${attemptId}/answers`, { question_id: questionId, choice_id: choiceId }).catch(() => {});
+    api
+      .post(`/tests/attempts/${attemptId}/answers`, {
+        question_id: questionId,
+        choice_id: choiceId,
+      })
+      .catch(() => {});
   };
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
       await api.post(`/tests/attempts/${attemptId}/submit`);
-      navigate(`/student/attempt/${attemptId}/review`);
+      navigate(`/student/attempt/${attemptId}/review`, {
+        replace: true,
+        state: {
+          courseId:
+            location.state?.courseId ||
+            data?.test?.course_id ||
+            data?.attempt?.course_id ||
+            null,
+        },
+      });
     } catch (e) {
       setError(e.response?.data?.message || "Nộp bài thất bại");
     } finally {
@@ -123,13 +190,21 @@ export default function StudentTestAttemptPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 max-w-2xl mx-auto">
-      <button type="button" onClick={() => navigate(-1)} className="text-sm text-slate-500 hover:text-slate-700 mb-4">
+      <button
+        type="button"
+        onClick={goBackToTestsTab}
+        className="text-sm text-slate-500 hover:text-slate-700 mb-4"
+      >
         ← Quay lại
       </button>
+
       <h1 className="text-xl font-semibold text-slate-900 mb-2">{test.title}</h1>
+
       <div className="mb-4">
         <div className="flex justify-between text-xs text-slate-500 mb-1">
-          <span>Câu {currentQ + 1} / {total}</span>
+          <span>
+            Câu {currentQ + 1} / {total}
+          </span>
           {timeLeftSec !== null && (
             <span
               className={`font-semibold ${
@@ -141,6 +216,7 @@ export default function StudentTestAttemptPage() {
             </span>
           )}
         </div>
+
         <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
           <div
             className="h-full rounded-full bg-emerald-600 transition-all"
@@ -148,10 +224,14 @@ export default function StudentTestAttemptPage() {
           />
         </div>
       </div>
+
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
         {currentQuestion && (
           <>
-            <p className="text-lg font-medium text-slate-900 mb-4">{currentQuestion.question_text}</p>
+            <p className="text-lg font-medium text-slate-900 mb-4">
+              {currentQuestion.question_text}
+            </p>
+
             <ul className="space-y-2">
               {(currentQuestion.choices || []).map((choice) => (
                 <li key={choice.id}>
@@ -160,7 +240,9 @@ export default function StudentTestAttemptPage() {
                       type="radio"
                       name={`q-${currentQuestion.id}`}
                       checked={answers[currentQuestion.id] === choice.id}
-                      onChange={() => handleSaveAnswer(currentQuestion.id, choice.id)}
+                      onChange={() =>
+                        handleSaveAnswer(currentQuestion.id, choice.id)
+                      }
                       className="text-slate-900"
                     />
                     <span className="text-sm">{choice.choice_text}</span>
@@ -171,6 +253,7 @@ export default function StudentTestAttemptPage() {
           </>
         )}
       </div>
+
       <div className="flex justify-between mt-6">
         <button
           type="button"
@@ -180,6 +263,7 @@ export default function StudentTestAttemptPage() {
         >
           ← Câu trước
         </button>
+
         {currentQ + 1 < total ? (
           <button
             type="button"

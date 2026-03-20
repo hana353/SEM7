@@ -20,8 +20,10 @@ const StudentHomePage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getStoredUser();
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedCourseId, setSelectedCourseId] = useState(null);
+  const [selectedCourseInnerTab, setSelectedCourseInnerTab] = useState("lectures");
 
   const tabFromQuery = useMemo(() => {
     const queryTab = new URLSearchParams(location.search).get("tab");
@@ -30,6 +32,7 @@ const StudentHomePage = () => {
 
   useEffect(() => {
     if (!tabFromQuery) return;
+
     const allowedTabs = new Set([
       "dashboard",
       "myCourses",
@@ -40,41 +43,74 @@ const StudentHomePage = () => {
 
     if (allowedTabs.has(tabFromQuery)) {
       setActiveTab(tabFromQuery);
+      setSelectedCourseId(null);
     }
   }, [tabFromQuery]);
+
+  useEffect(() => {
+    const state = location.state;
+
+    if (!state) return;
+
+    if (state.section === "myCourses" && state.selectedCourseId) {
+      setSelectedCourseId(state.selectedCourseId);
+      setSelectedCourseInnerTab(state.activeTab || "lectures");
+      setActiveTab("courseDetail");
+
+      navigate(location.pathname + location.search, {
+        replace: true,
+        state: null,
+      });
+    }
+  }, [location.state, navigate, location.pathname, location.search]);
 
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
         return <Dashboard />;
+
       case "myCourses":
         return (
           <MyCourses
             onOpenCourse={(id) => {
               setSelectedCourseId(id);
+              setSelectedCourseInnerTab("lectures");
               setActiveTab("courseDetail");
             }}
           />
         );
+
       case "courseDetail":
         return selectedCourseId ? (
           <StudentCourseDetail
             embedded
             courseId={selectedCourseId}
+            initialTab={selectedCourseInnerTab}
             onBack={() => {
               setSelectedCourseId(null);
+              setSelectedCourseInnerTab("lectures");
               setActiveTab("myCourses");
             }}
           />
         ) : (
-          <MyCourses />
+          <MyCourses
+            onOpenCourse={(id) => {
+              setSelectedCourseId(id);
+              setSelectedCourseInnerTab("lectures");
+              setActiveTab("courseDetail");
+            }}
+          />
         );
+
       case "suggestedCourses":
         return <SuggestedCourses />;
+
       case "vocabulary":
         return <VocabularyPractice />;
+
       case "profile":
         return <Profile />;
+
       default:
         return <Dashboard />;
     }
@@ -87,7 +123,7 @@ const StudentHomePage = () => {
         <div className="absolute top-1/3 -left-24 h-80 w-80 rounded-full bg-indigo-200/30 blur-3xl" />
         <div className="absolute bottom-0 right-1/4 h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl" />
       </div>
-      {/* Sidebar */}
+
       <aside className="fixed left-0 top-0 bottom-0 z-10 w-64 bg-slate-900/95 text-slate-50 flex flex-col backdrop-blur">
         <div className="px-5 py-4 border-b border-slate-800">
           <p className="text-xs uppercase tracking-wide text-slate-400">
@@ -97,19 +133,28 @@ const StudentHomePage = () => {
             {user?.full_name || user?.email || "Học viên"}
           </p>
         </div>
+
         <nav className="flex-1 px-2 py-3 space-y-1 text-sm">
           {sidebarItems.map((item) => {
-            const isActive = activeTab === item.id;
+            const isActive =
+              activeTab === item.id ||
+              (item.id === "myCourses" && activeTab === "courseDetail");
+
             return (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left transition ${
-                  isActive
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (item.id !== "myCourses") {
+                    setSelectedCourseId(null);
+                    setSelectedCourseInnerTab("lectures");
+                  }
+                }}
+                className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left transition ${isActive
                     ? "bg-slate-100 text-slate-900"
                     : "text-slate-200 hover:bg-slate-800/70 hover:text-white"
-                }`}
+                  }`}
               >
                 <span className="text-xs font-medium">{item.label}</span>
                 {isActive && (
@@ -119,6 +164,7 @@ const StudentHomePage = () => {
             );
           })}
         </nav>
+
         <div className="px-4 py-3 border-t border-slate-800 text-xs text-slate-300">
           <p className="truncate">
             {user?.full_name || user?.email || "Học viên"}
@@ -136,7 +182,6 @@ const StudentHomePage = () => {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="relative z-10 flex-1 flex flex-col ml-64 min-w-0">
         <header className="h-14 border-b border-white/60 bg-white/70 backdrop-blur flex items-center justify-between px-6 sticky top-0 z-10">
           <div>
@@ -158,4 +203,3 @@ const StudentHomePage = () => {
 };
 
 export default StudentHomePage;
-

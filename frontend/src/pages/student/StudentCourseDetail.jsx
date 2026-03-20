@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../../api/axios";
 
 const tabs = [
@@ -8,13 +8,22 @@ const tabs = [
   { id: "tests", label: "Bài test" },
 ];
 
-export default function StudentCourseDetail({ courseId: courseIdProp, embedded = false, onBack }) {
+export default function StudentCourseDetail({
+  courseId: courseIdProp,
+  embedded = false,
+  onBack,
+  initialTab = "lectures",
+}) {
   const params = useParams();
   const courseId = courseIdProp || params.courseId;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const queryTab = searchParams.get("tab") || "";
+  const defaultTab = embedded ? initialTab : queryTab || "lectures";
 
   const [course, setCourse] = useState(null);
-  const [activeTab, setActiveTab] = useState("lectures");
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [lectures, setLectures] = useState([]);
   const [flashcards, setFlashcards] = useState([]);
   const [tests, setTests] = useState([]);
@@ -26,37 +35,88 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
   const [purchaseError, setPurchaseError] = useState("");
   const [purchaseMessage, setPurchaseMessage] = useState("");
   const [isPurchasing, setIsPurchasing] = useState(false);
+
   const [testHistoryFor, setTestHistoryFor] = useState(null);
   const [testHistory, setTestHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const refreshTab = () => {
+  useEffect(() => {
+    if (embedded) {
+      setActiveTab(initialTab || "lectures");
+    }
+  }, [embedded, initialTab]);
+
+  useEffect(() => {
+    if (!embedded) {
+      setActiveTab(queryTab || "lectures");
+    }
+  }, [embedded, queryTab]);
+
+  useEffect(() => {
+    api
+      .get(`/courses/${courseId}`)
+      .then((res) => setCourse(res.data))
+      .catch(() => setError("Không tải được thông tin khóa học"))
+      .finally(() => setLoading(false));
+  }, [courseId]);
+
+  useEffect(() => {
     if (!courseId) return;
+
     if (activeTab === "lectures") {
       api
         .get(`/lectures/student/course/${courseId}`)
-        .then(res => setLectures(res.data?.data || []))
-        .catch(err => {
+        .then((res) => setLectures(res.data?.data || []))
+        .catch((err) => {
           console.error(err);
           setLectures([]);
         });
-    } else if (activeTab === "flashcards") {
+    }
+
+    if (activeTab === "flashcards") {
       api
         .get(`/flashcards?course_id=${courseId}`)
-        .then(res => setFlashcards(res.data?.data || []))
-        .catch(() => setFlashcards([]));
-    } else if (activeTab === "tests") {
+        .then((res) => setFlashcards(res.data?.data || []))
+        .catch((err) => {
+          console.error(err);
+          setFlashcards([]);
+        });
+    }
+
+    if (activeTab === "tests") {
       api
         .get(`/tests?course_id=${courseId}`)
-        .then(res => setTests(res.data?.data || []))
-        .catch(() => setTests([]));
+        .then((res) => setTests(res.data?.data || []))
+        .catch((err) => {
+          console.error(err);
+          setTests([]);
+        });
     }
-  };
+  }, [courseId, activeTab]);
+
+  useEffect(() => {
+    if (!courseId) return;
+
+    setCheckingEnrollment(true);
+    api
+      .get("/courses/student/my")
+      .then((res) => {
+        const owned = Array.isArray(res.data?.data)
+          ? res.data.data.some((c) => c.id === courseId)
+          : false;
+        setIsEnrolled(owned);
+      })
+      .catch((err) => {
+        console.error("Không thể kiểm tra trạng thái đăng ký:", err);
+      })
+      .finally(() => setCheckingEnrollment(false));
+  }, [courseId]);
 
   const openTestHistory = async (testId) => {
     setTestHistoryFor(testId);
     setLoadingHistory(true);
     setTestHistory([]);
+
     try {
       const res = await api.get(`/tests/${testId}/attempts/me`);
       setTestHistory(res.data?.data || []);
@@ -68,24 +128,9 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
     }
   };
 
-  const checkEnrollment = async () => {
-    if (!courseId) return;
-    setCheckingEnrollment(true);
-    try {
-      const res = await api.get("/courses/student/my");
-      const owned = Array.isArray(res.data?.data)
-        ? res.data.data.some((c) => c.id === courseId)
-        : false;
-      setIsEnrolled(owned);
-    } catch (err) {
-      console.error("Không thể kiểm tra trạng thái đăng ký:", err);
-    } finally {
-      setCheckingEnrollment(false);
-    }
-  };
-
   const handlePurchase = async () => {
     if (!course) return;
+
     setPurchaseError("");
     setPurchaseMessage("");
     setIsPurchasing(true);
@@ -97,13 +142,11 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
 
       const paymentUrl = res.data?.data?.payment_url;
       const enrolled = res.data?.data?.enrolled;
+
       if (enrolled) {
         setIsEnrolled(true);
         setPurchaseMessage(res.data?.message || "Đăng ký khóa học thành công.");
-        // Refresh enrollment status
-        checkEnrollment();
       } else if (paymentUrl) {
-        // Redirect user to VNPay payment page
         window.location.href = paymentUrl;
       } else {
         setPurchaseError(
@@ -118,22 +161,6 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
       setIsPurchasing(false);
     }
   };
-
-  useEffect(() => {
-    api
-      .get(`/courses/${courseId}`)
-      .then(res => setCourse(res.data))
-      .catch(() => setError("Không tải được thông tin khóa học"))
-      .finally(() => setLoading(false));
-  }, [courseId]);
-
-  useEffect(() => {
-    refreshTab();
-  }, [courseId, activeTab]);
-
-  useEffect(() => {
-    checkEnrollment();
-  }, [courseId]);
 
   if (loading) {
     return <div className="p-6 text-center text-sm text-slate-500">Đang tải…</div>;
@@ -196,15 +223,17 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
         ) : canPurchase ? (
           <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
             {purchaseMessage && (
-              <div className="mb-3 rounded-md bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">
+              <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                 {purchaseMessage}
               </div>
             )}
+
             {purchaseError && (
-              <div className="mb-3 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+              <div className="mb-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                 {purchaseError}
               </div>
             )}
+
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-slate-700">
@@ -224,7 +253,7 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
                 type="button"
                 onClick={handlePurchase}
                 disabled={isPurchasing}
-                className="w-full sm:w-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 {isPurchasing
                   ? "Đang xử lý..."
@@ -233,29 +262,30 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
                   : "Mua khóa học"}
               </button>
             </div>
+
             <p className="mt-2 text-xs text-slate-500">
-              Bạn sẽ được chuyển đến cổng thanh toán (VNPay). Sau khi hoàn tất, quay lại trang này hoặc truy cập mục Khóa học của tôi.
+              Bạn sẽ được chuyển đến cổng thanh toán. Sau khi hoàn tất, quay lại trang này hoặc truy cập mục Khóa học của tôi.
             </p>
           </div>
         ) : (
           <p className="mt-2 text-sm text-slate-500">
-            Khóa học hiện không thể mua (có thể đang chờ xuất bản hoặc đã hết hạn).
+            Khóa học hiện không thể mua.
           </p>
         )}
       </header>
 
       {isEnrolled && (
-        <div className={embedded ? "space-y-6" : "p-6 space-y-6"}>
-          <div className="flex gap-2 mb-2">
-            {tabs.map(tab => (
+        <div className={embedded ? "space-y-6" : "space-y-6 p-6"}>
+          <div className="mb-2 flex gap-2">
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
                   activeTab === tab.id
                     ? "bg-slate-900 text-white shadow-sm"
-                    : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
               >
                 {tab.label}
@@ -264,28 +294,29 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
           </div>
 
           {activeTab === "lectures" && (
-            <section className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">
+            <section className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">
                 Danh sách bài giảng
               </h2>
+
               {lectures.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Chưa có bài giảng cho khóa học này.
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {lectures.map((l, idx) => (
+                  {lectures.map((lecture, idx) => (
                     <li
-                      key={l.id}
-                      className="flex items-center justify-between py-2 border-b last:border-0"
+                      key={lecture.id}
+                      className="flex items-center justify-between border-b py-2 last:border-0"
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-900">
-                          {idx + 1}. {l.title}
+                          {idx + 1}. {lecture.title}
                         </p>
-                        {l.video_url && (
+                        {lecture.video_url && (
                           <a
-                            href={l.video_url}
+                            href={lecture.video_url}
                             target="_blank"
                             rel="noreferrer"
                             className="text-xs text-blue-600 hover:underline"
@@ -295,7 +326,7 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
                         )}
                       </div>
                       <p className="text-xs text-slate-500">
-                        {l.duration_minutes || 0} phút
+                        {lecture.duration_minutes || 0} phút
                       </p>
                     </li>
                   ))}
@@ -305,20 +336,21 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
           )}
 
           {activeTab === "flashcards" && (
-            <section className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">
+            <section className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">
                 Flashcard của khóa học
               </h2>
+
               {flashcards.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Chưa có flashcard nào được mở cho khóa học này.
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {flashcards.map(s => (
+                  {flashcards.map((s) => (
                     <li
                       key={s.id}
-                      className="flex items-center justify-between py-2 border-b last:border-0"
+                      className="flex items-center justify-between border-b py-2 last:border-0"
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-900">
@@ -328,10 +360,17 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
                           Trạng thái: {s.status || "PUBLISHED"}
                         </p>
                       </div>
+
                       <button
                         type="button"
-                        className="text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
-                        onClick={() => navigate(`/student/flashcards/${s.id}`)}
+                        className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs text-white hover:bg-slate-800"
+                        onClick={() =>
+                          navigate(`/student/flashcards/${s.id}`, {
+                            state: {
+                              courseId,
+                            },
+                          })
+                        }
                       >
                         Học flashcard
                       </button>
@@ -343,20 +382,21 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
           )}
 
           {activeTab === "tests" && (
-            <section className="bg-white/90 backdrop-blur rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">
+            <section className="rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">
                 Bài test của khóa học
               </h2>
+
               {tests.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Chưa có bài test nào được mở cho khóa học này.
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {tests.map(t => (
+                  {tests.map((t) => (
                     <li
                       key={t.id}
-                      className="flex items-center justify-between py-2 border-b last:border-0"
+                      className="flex items-center justify-between border-b py-2 last:border-0"
                     >
                       <div>
                         <p className="text-sm font-medium text-slate-900">
@@ -366,31 +406,43 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
                           Thời lượng: {t.duration_minutes || 0} phút
                         </p>
                       </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500"
-                      onClick={async () => {
-                        try {
-                          const res = await api.post(`/tests/${t.id}/attempts`);
-                          const attemptId = res.data?.data?.id;
-                          if (attemptId) navigate(`/student/attempt/${attemptId}`);
-                          else setError("Không thể bắt đầu làm bài");
-                        } catch (err) {
-                          setError(err.response?.data?.message || "Không thể bắt đầu làm bài");
-                        }
-                      }}
-                    >
-                      Làm test
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
-                      onClick={() => openTestHistory(t.id)}
-                    >
-                      Lịch sử làm
-                    </button>
-                  </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white hover:bg-emerald-500"
+                          onClick={async () => {
+                            try {
+                              const res = await api.post(`/tests/${t.id}/attempts`);
+                              const attemptId = res.data?.data?.id;
+
+                              if (attemptId) {
+                                navigate(`/student/attempt/${attemptId}`, {
+                                  state: {
+                                    courseId,
+                                  },
+                                });
+                              } else {
+                                setError("Không thể bắt đầu làm bài");
+                              }
+                            } catch (err) {
+                              setError(
+                                err.response?.data?.message || "Không thể bắt đầu làm bài"
+                              );
+                            }
+                          }}
+                        >
+                          Làm test
+                        </button>
+
+                        <button
+                          type="button"
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
+                          onClick={() => openTestHistory(t.id)}
+                        >
+                          Lịch sử làm
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -399,6 +451,7 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
           )}
         </div>
       )}
+
       {testHistoryFor && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
@@ -415,11 +468,14 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
                 Đóng
               </button>
             </div>
-            <div className="p-4 max-h-[60vh] overflow-y-auto">
+
+            <div className="max-h-[60vh] overflow-y-auto p-4">
               {loadingHistory ? (
                 <p className="text-sm text-slate-500">Đang tải lịch sử…</p>
               ) : testHistory.length === 0 ? (
-                <p className="text-sm text-slate-500">Bạn chưa có lần làm nào cho bài test này.</p>
+                <p className="text-sm text-slate-500">
+                  Bạn chưa có lần làm nào cho bài test này.
+                </p>
               ) : (
                 <ul className="space-y-2 text-sm">
                   {testHistory.map((a) => (
@@ -429,21 +485,34 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
                     >
                       <div>
                         <p className="text-xs text-slate-500">
-                          Nộp lúc: {a.submitted_at ? new Date(a.submitted_at).toLocaleString("vi-VN") : "—"}
+                          Nộp lúc:{" "}
+                          {a.submitted_at
+                            ? new Date(a.submitted_at).toLocaleString("vi-VN")
+                            : "—"}
                         </p>
                         <p className="text-xs text-slate-500">
                           Trạng thái: {a.status}
                         </p>
                       </div>
+
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-slate-800">
-                          {a.score != null && a.max_score != null ? `${a.score}/${a.max_score}` : "Chưa có điểm"}
+                          {a.score != null && a.max_score != null
+                            ? `${a.score}/${a.max_score}`
+                            : "Chưa có điểm"}
                         </span>
+
                         {["SUBMITTED", "GRADED"].includes(a.status) && (
                           <button
                             type="button"
-                            className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800"
-                            onClick={() => navigate(`/student/attempt/${a.id}/review`)}
+                            className="rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-800"
+                            onClick={() =>
+                              navigate(`/student/attempt/${a.id}/review`, {
+                                state: {
+                                  courseId,
+                                },
+                              })
+                            }
                           >
                             Xem chi tiết
                           </button>
@@ -460,4 +529,3 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
     </div>
   );
 }
-

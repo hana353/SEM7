@@ -1055,13 +1055,78 @@ SELECT email, code, type, expires_at, used_at, created_at
 FROM otp_codes
 ORDER BY created_at DESC;
 
+create table if not exists public.chat_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
 
-CREATE TABLE IF NOT EXISTS chat_leads (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(120) NOT NULL,
-  phone VARCHAR(30),
-  email VARCHAR(255),
-  interested_course VARCHAR(255),
-  message TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.chat_sessions(id) on delete cascade,
+  role varchar(20) not null check (role in ('user', 'assistant')),
+  content text not null,
+  metadata jsonb default '{}'::jsonb,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.knowledge_documents (
+  id uuid primary key default gen_random_uuid(),
+  type varchar(50) not null,
+  title varchar(255) not null,
+  content text not null,
+  source varchar(255),
+  tags text[] default '{}',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+insert into public.knowledge_documents (type, title, content, source, tags)
+values
+(
+  'guide',
+  'Cách học từ vựng để nhớ lâu',
+  'Để nhớ từ vựng lâu, nên học theo ngữ cảnh, dùng flashcards, ôn lại theo chu kỳ lặp lại ngắt quãng, đặt câu với từ mới và dùng từ đó trong nói hoặc viết.',
+  'manual',
+  ARRAY['tu vung', 'nho lau', 'flashcards']
+),
+(
+  'guide',
+  'Cách luyện speaking hiệu quả',
+  'Để luyện speaking hiệu quả, nên bắt đầu từ câu ngắn, luyện phản xạ với chủ đề quen thuộc, ghi âm lại giọng nói, shadowing theo audio chuẩn và luyện đều mỗi ngày.',
+  'manual',
+  ARRAY['speaking', 'phan xa', 'giao tiep']
+),
+(
+  'guide',
+  'Người mất gốc nên bắt đầu thế nào',
+  'Người mất gốc nên bắt đầu từ phát âm cơ bản, từ vựng thông dụng, mẫu câu giao tiếp đơn giản và duy trì học đều đặn trước khi chuyển sang mục tiêu nâng cao hơn.',
+  'manual',
+  ARRAY['mat goc', 'beginner', 'co ban']
+),
+(
+  'guide',
+  'Nên học IELTS hay giao tiếp',
+  'Nếu mục tiêu là thi chứng chỉ, đầu ra học tập hoặc du học thì nên ưu tiên IELTS. Nếu mục tiêu là sử dụng trong công việc và đời sống hàng ngày thì nên ưu tiên khóa giao tiếp.',
+  'manual',
+  ARRAY['ielts', 'giao tiep', 'so sanh']
+),
+(
+  'guide',
+  'Lộ trình học IELTS cho người mới',
+  'Người mới nên bắt đầu từ nền tảng phát âm, từ vựng và ngữ pháp cơ bản, sau đó luyện từng kỹ năng nghe nói đọc viết trước khi luyện đề tổng hợp.',
+  'manual',
+  ARRAY['ielts', 'lo trinh', 'nguoi moi']
+);
+
+
+insert into public.knowledge_documents (type, title, content, source, tags)
+values
+(
+  'guide',
+  'Nên học IELTS hay giao tiếp',
+  'Nếu mục tiêu của người học là thi chứng chỉ, đầu ra học tập, du học hoặc cần đo trình độ bằng điểm số thì nên ưu tiên IELTS. Nếu mục tiêu là sử dụng tiếng Anh trong công việc, phỏng vấn, giao tiếp hằng ngày hoặc cải thiện phản xạ nói thì nên ưu tiên giao tiếp. Người học cũng có thể bắt đầu từ giao tiếp nền tảng trước rồi chuyển sang IELTS khi đã có nền cơ bản.',
+  'manual',
+  ARRAY['ielts', 'giao tiếp', 'nên học', 'so sánh']
 );
