@@ -135,6 +135,23 @@ export default function StudentCourseDetail({ courseId: courseIdProp, embedded =
     checkEnrollment();
   }, [courseId]);
 
+  useEffect(() => {
+    const shouldHideChat = isEnrolled && activeTab === "tests";
+    window.dispatchEvent(
+      new CustomEvent("student:test-mode", {
+        detail: { hidden: shouldHideChat },
+      })
+    );
+
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("student:test-mode", {
+          detail: { hidden: false },
+        })
+      );
+    };
+  }, [activeTab, isEnrolled]);
+
   if (loading) {
     return <div className="p-6 text-center text-sm text-slate-500">Đang tải…</div>;
   }

@@ -48,16 +48,34 @@ function RouteAwareChatWidget({ onRequireAuth }) {
   const location = useLocation();
   const roleCode = getRoleCode();
   const authed = isAuthenticated();
+  const [hideStudentChat, setHideStudentChat] = useState(false);
+
+  useEffect(() => {
+    const handleStudentTestMode = (event) => {
+      setHideStudentChat(Boolean(event?.detail?.hidden));
+    };
+
+    window.addEventListener("student:test-mode", handleStudentTestMode);
+
+    return () => {
+      window.removeEventListener("student:test-mode", handleStudentTestMode);
+    };
+  }, []);
 
   const isHomeRoute = location.pathname === "/";
   const isStudentRoute =
     location.pathname === "/studenthomepage" ||
     location.pathname.startsWith("/student/");
+  const isStudentAttemptRoute = location.pathname.startsWith("/student/attempt/");
   const isTeacherRoute = location.pathname.startsWith("/teacher");
 
   const shouldShow =
     isHomeRoute ||
-    (authed && roleCode === ROLE.STUDENT && isStudentRoute) ||
+    (authed &&
+      roleCode === ROLE.STUDENT &&
+      isStudentRoute &&
+      !isStudentAttemptRoute &&
+      !hideStudentChat) ||
     (authed && roleCode === ROLE.TEACHER && isTeacherRoute);
 
   if (!shouldShow) return null;
