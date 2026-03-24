@@ -10,13 +10,16 @@
 ## Cách hoạt động
 1. Người dùng hỏi trong chatbox.
 2. Backend ưu tiên FAQ / keyword trước.
-3. Backend lấy các khóa học từ Supabase để gợi ý.
+3. Backend lấy các khóa học từ SQL Server local để gợi ý.
 4. Nếu có `GEMINI_API_KEY` thì thử dùng Gemini để trả lời tự nhiên hơn.
 5. Người dùng có thể để lại lead qua form.
 
 ## Biến môi trường nên có ở backend
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `DB_HOST` (mặc định `localhost`)
+- `DB_PORT` (mặc định `1433`)
+- `DB_NAME` (mặc định `SEM7`)
+- `DB_USER` (mặc định `sa`)
+- `DB_PASSWORD` (mặc định `12345`)
 - `GEMINI_API_KEY` (không bắt buộc)
 - `GEMINI_MODEL` (không bắt buộc, mặc định `gemini-2.0-flash`)
 
