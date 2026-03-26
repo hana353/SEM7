@@ -74,43 +74,56 @@ async function getAllCourses() {
 }
 
 async function getCoursesForStudent(studentId) {
-  const { data, error } = await supabase
+  const { data: enrollments, error: enrollmentError } = await supabase
     .from("enrollments")
-    .select(`
-      enrolled_at,
-      progress_percent,
-      courses!inner (
-        id,
-        teacher_id,
-        title,
-        description,
-        price,
-        status,
-        total_duration_minutes,
-        start_at,
-        end_at,
-        created_at,
-        updated_at,
-        users!courses_teacher_id_fkey (
-          full_name,
-          email
-        )
-      )
-    `)
+    .select("course_id, enrolled_at, progress_percent")
     .eq("student_id", studentId)
-    .neq("courses.status", "ARCHIVED")
     .order("enrolled_at", { ascending: false });
 
-  if (error) throw new Error(error.message);
+  if (enrollmentError) throw new Error(enrollmentError.message);
 
-  return (data || []).map((row) => {
-    const course = normalizeCourse(row.courses);
-    return {
-      ...course,
-      enrolled_at: row.enrolled_at,
-      progress_percent: row.progress_percent,
-    };
-  });
+  if (!enrollments?.length) return [];
+
+  const courseIds = enrollments.map((x) => x.course_id);
+
+  const { data: courses, error: courseError } = await supabase
+    .from("courses")
+    .select(`
+      id,
+      teacher_id,
+      title,
+      description,
+      price,
+      status,
+      total_duration_minutes,
+      start_at,
+      end_at,
+      created_at,
+      updated_at,
+      users!courses_teacher_id_fkey (
+        full_name,
+        email
+      )
+    `)
+    .in("id", courseIds)
+    .neq("status", "ARCHIVED");
+
+  if (courseError) throw new Error(courseError.message);
+
+  const courseMap = new Map((courses || []).map((c) => [c.id, normalizeCourse(c)]));
+
+  return (enrollments || [])
+    .map((row) => {
+      const course = courseMap.get(row.course_id);
+      if (!course) return null;
+
+      return {
+        ...course,
+        enrolled_at: row.enrolled_at,
+        progress_percent: row.progress_percent,
+      };
+    })
+    .filter(Boolean);
 }
 
 async function getCoursesByTeacherId(teacherId) {

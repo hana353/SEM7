@@ -17,6 +17,8 @@ const powerBIRoutes = require("./routes/powerbi.routes");
 const speechRoutes = require("./routes/speech.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const chatRoutes = require("./routes/chat.routes");
+const aiDashboardRoutes = require("./routes/aiDashboardRoutes");
+const { startAiDashboardAutoRefresh } = require("./services/aiDashboardService");
 
 process.on("exit", (code) => {
   console.log("Process exit with code:", code);
@@ -44,6 +46,8 @@ app.get("/health", (req, res) => {
   res.json({ ok: true, message: "health ok" });
 });
 
+
+
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use("/api/users", userRoutes);
@@ -58,9 +62,11 @@ app.use("/api/powerbi", powerBIRoutes);
 app.use("/api/speech", speechRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/dashboard-ai", aiDashboardRoutes);
 
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  startAiDashboardAutoRefresh();
 });
 
 server.on("listening", () => {

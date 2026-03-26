@@ -6,7 +6,6 @@ import RecentUsersTable from "./RecentUsersTable";
 import CoursesTable from "./CoursesTable";
 import CreateCourseForm from "./CreateCourseForm";
 import VocabularySection from "./VocabularySection";
-import RevenuePage from "./RevenuePage";
 import LectureApprovalSection from "./LectureApprovalSection";
 
 const sidebarItems = [
@@ -15,29 +14,31 @@ const sidebarItems = [
   { id: "courses", label: "Khóa học" },
   { id: "lectureApproval", label: "Duyệt bài giảng" },
   { id: "vocab", label: "Bộ từ vựng (Free)" },
-  { id: "reports", label: "Doanh thu" },
-  // { id: "settings", label: "Cài đặt" },
 ];
 
 const ADMIN_POWERBI_IFRAME_URL =
   "https://app.powerbi.com/reportEmbed?reportId=3ed33e9b-f4b9-4634-a28a-bc5a59432a74&groupId=2055173e-fdb5-48bb-be7c-8816be59edab&autoAuth=true&ctid=447080b4-b9c6-4b0b-92fd-b543a68b4e97";
 
-const ADMIN_POWERBI_OPEN_URL =
-  "https://app.powerbi.com/groups/2055173e-fdb5-48bb-be7c-8816be59edab/reports/3ed33e9b-f4b9-4634-a28a-bc5a59432a74/36d50ecae822c0d9907e?experience=power-bi";
 
 export default function AdminHomePage() {
   const navigate = useNavigate();
   const user = getStoredUser();
+
   const [activeSection, setActiveSection] = useState("dashboard");
   const [showCreateCourseModal, setShowCreateCourseModal] = useState(false);
+
   const [users, setUsers] = useState([]);
   const [courses, setCourses] = useState([]);
   const [vocabTopics, setVocabTopics] = useState([]);
   const [stats, setStats] = useState({});
+
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingVocab, setLoadingVocab] = useState(true);
-  const [loadingStats, setLoadingStats] = useState(true);
+
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(Date.now());
+  const [refreshingDashboard, setRefreshingDashboard] = useState(false);
+  const [dashboardRefreshError, setDashboardRefreshError] = useState("");
 
   useEffect(() => {
     api
@@ -61,44 +62,71 @@ export default function AdminHomePage() {
     api
       .get("/stats/admin")
       .then((res) => setStats(res.data || {}))
-      .catch(() => setStats({}))
-      .finally(() => setLoadingStats(false));
+      .catch(() => setStats({}));
   }, []);
+
+  const refreshDashboard = async () => {
+    try {
+      setRefreshingDashboard(true);
+      setDashboardRefreshError("");
+
+      const response = await api.post("/dashboard-ai/refresh");
+      if (response?.data?.success) {
+        setDashboardRefreshKey(Date.now());
+        return;
+      }
+
+      setDashboardRefreshError("Làm mới lời khuyên AI thất bại.");
+    } catch (error) {
+      setDashboardRefreshError(
+        error?.response?.data?.message || "Không thể làm mới lời khuyên AI."
+      );
+      console.error("Không thể làm mới lời khuyên AI:", error);
+    } finally {
+      setRefreshingDashboard(false);
+    }
+  };
 
   const renderContent = () => {
     if (activeSection === "dashboard") {
       return (
-        <section className="rounded-2xl bg-white shadow-sm border border-slate-200 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Dashboard Power BI
-              </h2>
-              <p className="text-sm text-slate-500">
-                Báo cáo quản trị được nhúng trực tiếp từ Power BI.
-              </p>
+        <section className="h-full">
+          <div className="h-full rounded-2xl bg-white border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Dashboard Power BI
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Theo dõi KPI, doanh thu, trạng thái đơn hàng và chất lượng học
+                  tập
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={refreshDashboard}
+                disabled={refreshingDashboard}
+                className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-200"
+              >
+                {refreshingDashboard ? "Đang làm mới..." : "Làm mới dashboard"}
+              </button>
             </div>
 
-            <a
-              href={ADMIN_POWERBI_OPEN_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              Mở Power BI
-            </a>
-          </div>
+            {dashboardRefreshError ? (
+              <div className="px-4 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">
+                {dashboardRefreshError}
+              </div>
+            ) : null}
 
-          <div className="p-4">
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-              <iframe
-                title="Admin Power BI Dashboard"
-                src={ADMIN_POWERBI_IFRAME_URL}
-                className="w-full"
-                style={{ height: "78vh", minHeight: "720px", border: "none" }}
-                allowFullScreen
-              />
-            </div>
+            <iframe
+              key={dashboardRefreshKey}
+              title="Admin Power BI Dashboard"
+              src={`${ADMIN_POWERBI_IFRAME_URL}&t=${dashboardRefreshKey}`}
+              className="w-full h-[calc(100%-61px)]"
+              style={{ border: "none" }}
+              allowFullScreen
+            />
           </div>
         </section>
       );
@@ -167,9 +195,7 @@ export default function AdminHomePage() {
               onUpdated={() =>
                 api
                   .get("/courses")
-                  .then((r) =>
-                    setCourses(Array.isArray(r.data) ? r.data : [])
-                  )
+                  .then((r) => setCourses(Array.isArray(r.data) ? r.data : []))
               }
             />
           )}
@@ -211,10 +237,6 @@ export default function AdminHomePage() {
 
     if (activeSection === "lectureApproval") {
       return <LectureApprovalSection />;
-    }
-
-    if (activeSection === "reports") {
-      return <RevenuePage />;
     }
 
     if (activeSection === "settings") {
@@ -293,7 +315,13 @@ export default function AdminHomePage() {
           </div>
         </header>
 
-        <div className="flex-1 px-6 py-5 space-y-6 overflow-y-auto">
+        <div
+          className={`flex-1 ${
+            activeSection === "dashboard"
+              ? "p-4 overflow-hidden"
+              : "px-6 py-5 space-y-6 overflow-y-auto"
+          }`}
+        >
           {renderContent()}
         </div>
       </main>
