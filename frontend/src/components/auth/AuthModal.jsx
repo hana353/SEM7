@@ -31,14 +31,14 @@ export default function AuthModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4 py-6 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/55 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
       role="dialog"
       aria-modal="true"
       aria-label="Đăng nhập và đăng ký"
       onClick={onClose}
     >
       <div
-        className="relative mx-auto w-full max-w-5xl overflow-hidden rounded-3xl bg-white/90 shadow-2xl ring-1 ring-white/60"
+        className="relative mx-auto my-4 w-full max-w-5xl overflow-hidden rounded-3xl bg-white/90 shadow-2xl ring-1 ring-white/60 sm:my-0"
         onClick={event => event.stopPropagation()}
       >
         <button
